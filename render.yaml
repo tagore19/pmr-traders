@@ -24,3 +24,4 @@ databases:
     region: singapore
     databaseName: pmr_traders
     user: pmr_admin
+

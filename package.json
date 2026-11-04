@@ -4,8 +4,7 @@
   "private": true,
   "description": "PMR Traders - Poultry Order Management & Distribution Platform",
   "scripts": {
-    "install:all": "npm --prefix client install && npm --prefix server install",
-    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install",
+    "build": "npm --prefix client install --include=dev && npm --prefix client run build && npm --prefix server install",
     "start": "node server/src/index.js",
     "db:init": "node server/src/db/initDb.js",
     "seed": "node server/src/db/seed.js"
