@@ -22,14 +22,14 @@ router.post('/rates/daily', verifyAdmin, async (req, res) => {
       });
     }
     const { rows } = await pool.query(
-      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id)
-       VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id, set_by_user_id)
+       VALUES ($1, $2, $3, $3) RETURNING *`,
       [date, paper_rate, req.user.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 

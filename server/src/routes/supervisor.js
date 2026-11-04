@@ -21,7 +21,7 @@ router.get('/rates/today', verifySupervisor, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.*, u.name AS set_by_name, u.role AS set_by_role
        FROM daily_rates r
-       LEFT JOIN users u ON u.id = r.set_by_admin_id
+       LEFT JOIN users u ON u.id = COALESCE(r.set_by_admin_id, r.set_by_user_id)
        WHERE r.date = $1`, [today]
     );
     if (!rows.length) {
@@ -29,7 +29,7 @@ router.get('/rates/today', verifySupervisor, async (req, res) => {
     }
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
@@ -41,7 +41,7 @@ router.get('/rates/by-date', verifySupervisor, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.*, u.name AS set_by_name, u.role AS set_by_role
        FROM daily_rates r
-       LEFT JOIN users u ON u.id = r.set_by_admin_id
+       LEFT JOIN users u ON u.id = COALESCE(r.set_by_admin_id, r.set_by_user_id)
        WHERE r.date = $1`, [date]
     );
     if (!rows.length) {
@@ -49,7 +49,7 @@ router.get('/rates/by-date', verifySupervisor, async (req, res) => {
     }
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
@@ -59,13 +59,13 @@ router.get('/rates/history', verifySupervisor, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.*, u.name AS set_by_name, u.role AS set_by_role
        FROM daily_rates r
-       LEFT JOIN users u ON u.id = r.set_by_admin_id
+       LEFT JOIN users u ON u.id = COALESCE(r.set_by_admin_id, r.set_by_user_id)
        ORDER BY r.date DESC
        LIMIT 60`
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
@@ -83,17 +83,19 @@ router.post('/rates/daily', verifySupervisor, async (req, res) => {
     const ordersExist = parseInt(orders[0].count) > 0;
 
     const { rows } = await pool.query(
-      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id, set_by_user_id)
+       VALUES ($1, $2, $3, $3)
        ON CONFLICT (date) DO UPDATE
-       SET paper_rate = EXCLUDED.paper_rate, set_by_admin_id = EXCLUDED.set_by_admin_id
+       SET paper_rate = EXCLUDED.paper_rate,
+           set_by_admin_id = EXCLUDED.set_by_admin_id,
+           set_by_user_id = EXCLUDED.set_by_user_id
        RETURNING *`,
       [date, paper_rate, req.user.id]
     );
     res.status(200).json({ rate: rows[0], ordersExist });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
@@ -105,10 +107,12 @@ router.put('/rates/daily/:date', verifySupervisor, async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO daily_rates (date, paper_rate, set_by_admin_id, set_by_user_id)
+       VALUES ($1, $2, $3, $3)
        ON CONFLICT (date) DO UPDATE
-       SET paper_rate = EXCLUDED.paper_rate, set_by_admin_id = EXCLUDED.set_by_admin_id
+       SET paper_rate = EXCLUDED.paper_rate,
+           set_by_admin_id = EXCLUDED.set_by_admin_id,
+           set_by_user_id = EXCLUDED.set_by_user_id
        RETURNING *`,
       [req.params.date, paper_rate, req.user.id]
     );
@@ -120,7 +124,7 @@ router.put('/rates/daily/:date', verifySupervisor, async (req, res) => {
     res.json({ rate: rows[0], ordersExist: parseInt(orders[0].count) > 0 });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 

@@ -10,6 +10,13 @@ async function initDb(skipExit = false) {
 
   // Execute entire schema (creates tables, sequences, extensions, indexes)
   await pool.query(schemaSql);
+
+  // Ensure daily_rates has both column aliases for backwards/forwards compatibility
+  await pool.query(`
+    ALTER TABLE daily_rates ADD COLUMN IF NOT EXISTS set_by_admin_id UUID REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE daily_rates ADD COLUMN IF NOT EXISTS set_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+  `);
+
   console.log('[DB-INIT] Database schema applied successfully.');
 
   // Seed initial groups

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS daily_rates (
   date            DATE NOT NULL UNIQUE,
   paper_rate      DECIMAL(10,2) NOT NULL,
   set_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  set_by_admin_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMP DEFAULT NOW()
 );
 
