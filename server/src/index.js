@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const pool = require('./db');
 
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = 'pmr_traders_fallback_secret_change_in_production_2026';
@@ -17,14 +18,43 @@ const dailyFarmsRoutes = require('./routes/dailyFarms');
 const dailySheetsRoutes = require('./routes/dailySheets');
 const accountingRoutes = require('./routes/accounting');
 const initDb = require('./db/initDb');
+const { securityHeaders, apiLimiter } = require('./middleware/security');
 
 const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+// Trust reverse proxy (Render, Cloudflare, Railway) for accurate IP-based rate limiting
+app.set('trust proxy', 1);
 
-// Health check endpoint (always available for monitoring/uptime)
-app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
+// Security Headers & Payload Boundaries
+app.use(securityHeaders);
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json({ limit: '100kb' }));
+
+// Global API Rate Limiter
+app.use('/api', apiLimiter);
+
+// Comprehensive Deep Health Check (Uptime & PostgreSQL connectivity)
+app.get('/api/health', async (_, res) => {
+  const startTime = Date.now();
+  try {
+    const dbRes = await pool.query('SELECT 1 AS healthy');
+    const dbLatencyMs = Date.now() - startTime;
+    res.json({
+      status: 'ok',
+      database: dbRes.rows.length ? 'connected' : 'unreachable',
+      latency_ms: dbLatencyMs,
+      time: new Date().toISOString(),
+      uptime_seconds: Math.floor(process.uptime())
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      database: 'error',
+      error: err.message,
+      time: new Date().toISOString()
+    });
+  }
+});
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -67,25 +97,58 @@ app.use((_, res) => res.status(404).json({ error: 'Route not found' }));
 // Global error handler
 app.use((err, _req, res, _next) => {
   console.error('[SERVER ERROR]', err);
-  res.status(500).json({ error: 'Internal server error' });
+  const status = err.status || 500;
+  res.status(status).json({
+    error: err.message || 'Internal server error',
+    status
+  });
 });
 
 const PORT = process.env.PORT || 4000;
+let serverInstance = null;
 
 async function startServer() {
-  // If AUTO_MIGRATE is set (useful on Render/Railway initial boot), run DB schema & seeds
+  // If AUTO_MIGRATE is set, apply database schema, indexes & seeds on boot
   if (process.env.AUTO_MIGRATE === 'true') {
     try {
       console.log('[SERVER] AUTO_MIGRATE is true. Initializing database schema...');
       await initDb(true);
     } catch (err) {
-      console.error('[SERVER] Database migration error on boot:', err);
+      console.error('[SERVER] Database migration error on boot:', err.message);
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] PMR Traders running on http://0.0.0.0:${PORT}`);
+  serverInstance = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SERVER] PMR Traders API running on http://0.0.0.0:${PORT}`);
   });
+
+  return serverInstance;
 }
 
-startServer();
+// Graceful Shutdown Handler
+function gracefulShutdown(signal) {
+  console.log(`[SERVER] Received ${signal}. Starting graceful shutdown...`);
+  if (serverInstance) {
+    serverInstance.close(async () => {
+      console.log('[SERVER] HTTP server closed.');
+      try {
+        await pool.end();
+        console.log('[DB] PostgreSQL pool drained.');
+      } catch (err) {
+        console.error('[DB] Error closing pool:', err.message);
+      }
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };

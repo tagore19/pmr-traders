@@ -17,7 +17,27 @@ async function initDb(skipExit = false) {
     ALTER TABLE daily_rates ADD COLUMN IF NOT EXISTS set_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
   `);
 
-  console.log('[DB-INIT] Database schema applied successfully.');
+  // Ensure performance indexes exist
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_daily_farms_date ON daily_farms(date);
+    CREATE INDEX IF NOT EXISTS idx_daily_farms_date_name ON daily_farms(date, farm_name);
+    CREATE INDEX IF NOT EXISTS idx_orders_date_group ON orders(date, group_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_daily_farm ON orders(daily_farm_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_customer_date ON orders(customer_id, date);
+    CREATE INDEX IF NOT EXISTS idx_orders_supervisor ON orders(supervisor_id);
+    CREATE INDEX IF NOT EXISTS idx_cust_payments_customer ON customer_payments(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_cust_payments_date ON customer_payments(payment_date);
+    CREATE INDEX IF NOT EXISTS idx_cust_payments_cust_date ON customer_payments(customer_id, payment_date);
+    CREATE INDEX IF NOT EXISTS idx_cust_payments_group ON customer_payments(group_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_notes_customer ON customer_credit_notes(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_notes_cust_date ON customer_credit_notes(customer_id, date);
+    CREATE INDEX IF NOT EXISTS idx_credit_notes_group ON customer_credit_notes(group_id);
+    CREATE INDEX IF NOT EXISTS idx_customers_group ON customers(group_id);
+    CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+  `);
+
+  console.log('[DB-INIT] Database schema and performance indexes applied successfully.');
 
   // Seed initial groups
   const sureshGroup = await pool.query(`

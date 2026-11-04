@@ -58,8 +58,8 @@ router.put('/rates/daily/:date', verifyAdmin, async (req, res) => {
 
 // POST /api/admin/customers
 router.post('/customers', verifyAdmin, async (req, res) => {
-  const { name, group_id, route_id, minus_rate } = req.body;
-  if (!name) return res.status(400).json({ error: 'Customer name required' });
+  const { name, group_id, minus_rate } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Customer name required' });
   let targetGroupId = group_id;
   if (!targetGroupId) {
     const g = await pool.query('SELECT id FROM groups ORDER BY name LIMIT 1');
@@ -68,36 +68,34 @@ router.post('/customers', verifyAdmin, async (req, res) => {
   if (!targetGroupId) return res.status(400).json({ error: 'group_id required' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO customers (name, group_id, route_id, minus_rate)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [name, targetGroupId, route_id || null, minus_rate !== undefined ? parseFloat(minus_rate) : 0]
+      `INSERT INTO customers (name, group_id, minus_rate)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [name.trim(), targetGroupId, minus_rate !== undefined ? parseFloat(minus_rate) : 0]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Customer name already exists in this group' });
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
 // PUT /api/admin/customers/:id
 router.put('/customers/:id', verifyAdmin, async (req, res) => {
-  const { name, group_id, route_id, minus_rate, is_active } = req.body;
+  const { name, group_id, minus_rate } = req.body;
   try {
     const { rows } = await pool.query(
       `UPDATE customers SET
          name = COALESCE($1, name),
          group_id = COALESCE($2, group_id),
-         route_id = COALESCE($3, route_id),
-         minus_rate = COALESCE($4, minus_rate),
-         is_active = COALESCE($5, is_active)
-       WHERE id = $6 RETURNING *`,
-      [name, group_id, route_id, minus_rate, is_active, req.params.id]
+         minus_rate = COALESCE($3, minus_rate)
+       WHERE id = $4 RETURNING *`,
+      [name ? name.trim() : null, group_id || null, minus_rate !== undefined ? parseFloat(minus_rate) : null, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Customer not found' });
     res.json(rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Customer name already exists in this group' });
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
@@ -420,23 +418,21 @@ router.get('/customers', verifyAdmin, async (req, res) => {
   try {
     let query, params;
     if (req.query.group_id) {
-      query = `SELECT c.*, f.farm_name as route_name, g.name AS group_name
+      query = `SELECT c.*, g.name AS group_name
                FROM customers c
-               LEFT JOIN farms f ON f.id=c.route_id
-               LEFT JOIN groups g ON g.id=c.group_id
-               WHERE c.group_id=$1 ORDER BY c.name`;
+               LEFT JOIN groups g ON g.id = c.group_id
+               WHERE c.group_id = $1 ORDER BY c.name`;
       params = [req.query.group_id];
     } else {
-      query = `SELECT c.*, f.farm_name as route_name, g.name AS group_name
+      query = `SELECT c.*, g.name AS group_name
                FROM customers c
-               LEFT JOIN farms f ON f.id=c.route_id
-               LEFT JOIN groups g ON g.id=c.group_id
+               LEFT JOIN groups g ON g.id = c.group_id
                ORDER BY c.name`;
       params = [];
     }
     const { rows } = await pool.query(query, params);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+  } catch (err) { res.status(500).json({ error: err.message || 'Server error' }); }
 });
 
 // GET /api/admin/farms – list all farms

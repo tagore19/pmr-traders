@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { verifySupervisor } = require('../middleware/auth');
+const { isValidDateString, isValidUUID } = require('../middleware/security');
 
 const router = express.Router();
 
@@ -10,13 +11,17 @@ router.get('/daily', verifySupervisor, async (req, res) => {
   const { date, group_id } = req.query;
   const targetDate = date || new Date().toISOString().split('T')[0];
 
+  if (!isValidDateString(targetDate)) {
+    return res.status(400).json({ error: 'Invalid date format. Expected YYYY-MM-DD.' });
+  }
+
   try {
     // Determine effective group
     let targetGroupId = null;
     let groupName = 'All Groups';
 
     if (req.user.role === 'ADMIN') {
-      if (group_id) {
+      if (group_id && isValidUUID(group_id)) {
         targetGroupId = group_id;
         const g = await pool.query('SELECT name FROM groups WHERE id = $1', [group_id]);
         if (g.rows.length) groupName = g.rows[0].name;
@@ -158,7 +163,7 @@ router.get('/daily', verifySupervisor, async (req, res) => {
     });
   } catch (err) {
     console.error('[DAILY SHEET GET ERROR]', err);
-    res.status(500).json({ error: 'Failed to generate daily sheet' });
+    res.status(500).json({ error: err.message || 'Failed to generate daily sheet' });
   }
 });
 

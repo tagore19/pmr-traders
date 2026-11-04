@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { verifySupervisor } = require('../middleware/auth');
+const { isValidDateString, parsePositiveFloat, parsePositiveInt, sanitizeString, isValidUUID } = require('../middleware/security');
 
 const router = express.Router();
 
@@ -8,6 +9,11 @@ const router = express.Router();
 router.get('/', verifySupervisor, async (req, res) => {
   const { date } = req.query;
   const targetDate = date || new Date().toISOString().split('T')[0];
+
+  if (!isValidDateString(targetDate)) {
+    return res.status(400).json({ error: 'Invalid date format. Expected YYYY-MM-DD.' });
+  }
+
   const isAdmin = req.user && req.user.role === 'ADMIN';
 
   try {
@@ -71,24 +77,30 @@ router.get('/', verifySupervisor, async (req, res) => {
     res.json(sanitized);
   } catch (err) {
     console.error('[DAILY FARMS GET ERROR]', err);
-    res.status(500).json({ error: 'Failed to fetch daily farms' });
+    res.status(500).json({ error: err.message || 'Failed to fetch daily farms' });
   }
 });
 
 // POST /api/daily-farms – Add daily farm (Admin, Supervisor 1, Supervisor 2)
 router.post('/', verifySupervisor, async (req, res) => {
-  const { date, farm_name, vehicle_no, total_weight_kg, total_boxes, notes, rate_per_kg } = req.body;
-  const isAdmin = req.user && req.user.role === 'ADMIN';
+  const rawName = sanitizeString(req.body.farm_name, 100);
+  const rawVehicle = sanitizeString(req.body.vehicle_no, 50);
 
-  if (!farm_name || !farm_name.trim()) {
+  if (!rawName) {
     return res.status(400).json({ error: 'Farm name is required' });
   }
 
-  const targetDate = date || new Date().toISOString().split('T')[0];
-  const weight = parseFloat(total_weight_kg) || 0;
-  const boxes = parseInt(total_boxes, 10) || 0;
+  const targetDate = req.body.date || new Date().toISOString().split('T')[0];
+  if (!isValidDateString(targetDate)) {
+    return res.status(400).json({ error: 'Invalid date format. Expected YYYY-MM-DD.' });
+  }
+
+  const weight = parsePositiveFloat(req.body.total_weight_kg, 0);
+  const boxes = parsePositiveInt(req.body.total_boxes, 0);
+
+  const isAdmin = req.user && req.user.role === 'ADMIN';
   // Only admin can set purchase rate; supervisors default to 0
-  const farmRate = isAdmin && rate_per_kg !== undefined ? (parseFloat(rate_per_kg) || 0) : 0;
+  const farmRate = isAdmin && req.body.rate_per_kg !== undefined ? parsePositiveFloat(req.body.rate_per_kg, 0) : 0;
 
   try {
     // Check if farm already exists for this date to provide an explicit, clear error
@@ -97,14 +109,14 @@ router.post('/', verifySupervisor, async (req, res) => {
        FROM daily_farms df 
        LEFT JOIN users u ON u.id = df.added_by_id
        WHERE df.date = $1 AND LOWER(TRIM(df.farm_name)) = LOWER(TRIM($2))`,
-      [targetDate, farm_name]
+      [targetDate, rawName]
     );
 
     if (existing.rows.length) {
       const addedBy = existing.rows[0].added_by_name || 'Another user';
       const vNo = existing.rows[0].vehicle_no ? ` (${existing.rows[0].vehicle_no})` : '';
       return res.status(409).json({
-        error: `Farm "${farm_name}" is already added for ${targetDate} by ${addedBy}${vNo}. Please edit the existing entry instead.`
+        error: `Farm "${rawName}" is already added for ${targetDate} by ${addedBy}${vNo}. Please edit the existing entry instead.`
       });
     }
 
@@ -112,10 +124,9 @@ router.post('/', verifySupervisor, async (req, res) => {
       `INSERT INTO daily_farms (date, farm_name, vehicle_no, total_weight_kg, total_boxes, rate_per_kg, added_by_id, notes)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [targetDate, farm_name.trim(), vehicle_no ? vehicle_no.trim() : null, weight, boxes, farmRate, req.user.id, notes || null]
+      [targetDate, rawName, rawVehicle || null, weight, boxes, farmRate, req.user.id, sanitizeString(req.body.notes, 500) || null]
     );
 
-    // Return with user name and sanitized rate for non-admins
     const raw = rows[0];
     const totalCost = weight * farmRate;
     const result = {
@@ -136,18 +147,26 @@ router.post('/', verifySupervisor, async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: `Farm "${farm_name}" already exists for ${targetDate}.` });
+      return res.status(409).json({ error: `Farm "${rawName}" already exists for ${targetDate}.` });
     }
     console.error('[DAILY FARMS POST ERROR]', err);
-    res.status(500).json({ error: 'Failed to add daily farm' });
+    res.status(500).json({ error: err.message || 'Failed to add daily farm' });
   }
 });
 
 // PUT /api/daily-farms/:id – Update farm info
 router.put('/:id', verifySupervisor, async (req, res) => {
-  const { farm_name, vehicle_no, total_weight_kg, total_boxes, notes, rate_per_kg } = req.body;
+  const { id } = req.params;
+  if (!isValidUUID(id)) return res.status(400).json({ error: 'Invalid daily farm ID format' });
+
+  const rawName = req.body.farm_name ? sanitizeString(req.body.farm_name, 100) : null;
+  const rawVehicle = req.body.vehicle_no !== undefined ? sanitizeString(req.body.vehicle_no, 50) : null;
+  const weight = req.body.total_weight_kg !== undefined ? parsePositiveFloat(req.body.total_weight_kg, 0) : null;
+  const boxes = req.body.total_boxes !== undefined ? parsePositiveInt(req.body.total_boxes, 0) : null;
+  const notes = req.body.notes !== undefined ? sanitizeString(req.body.notes, 500) : null;
+
   const isAdmin = req.user && req.user.role === 'ADMIN';
-  const parsedRate = rate_per_kg !== undefined ? (parseFloat(rate_per_kg) || 0) : null;
+  const parsedRate = req.body.rate_per_kg !== undefined ? parsePositiveFloat(req.body.rate_per_kg, 0) : null;
 
   try {
     const { rows } = await pool.query(
@@ -160,16 +179,7 @@ router.put('/:id', verifySupervisor, async (req, res) => {
          rate_per_kg = CASE WHEN $7::boolean THEN COALESCE($6, rate_per_kg) ELSE rate_per_kg END
        WHERE id = $8
        RETURNING *`,
-      [
-        farm_name ? farm_name.trim() : null,
-        vehicle_no !== undefined ? vehicle_no.trim() : null,
-        total_weight_kg !== undefined ? parseFloat(total_weight_kg) : null,
-        total_boxes !== undefined ? parseInt(total_boxes, 10) : null,
-        notes !== undefined ? notes : null,
-        parsedRate,
-        isAdmin,
-        req.params.id
-      ]
+      [rawName, rawVehicle, weight, boxes, notes, parsedRate, isAdmin, id]
     );
 
     if (!rows.length) {
@@ -177,12 +187,12 @@ router.put('/:id', verifySupervisor, async (req, res) => {
     }
 
     const row = rows[0];
-    const weight = parseFloat(row.total_weight_kg) || 0;
-    const rate = parseFloat(row.rate_per_kg) || 0;
+    const w = parseFloat(row.total_weight_kg) || 0;
+    const r = parseFloat(row.rate_per_kg) || 0;
     const result = {
       ...row,
-      rate_per_kg: isAdmin ? rate : null,
-      total_procurement_cost: isAdmin ? (weight * rate) : null
+      rate_per_kg: isAdmin ? r : null,
+      total_procurement_cost: isAdmin ? (w * r) : null
     };
 
     res.json(result);
@@ -191,15 +201,18 @@ router.put('/:id', verifySupervisor, async (req, res) => {
       return res.status(409).json({ error: 'A farm with this name already exists on this date.' });
     }
     console.error('[DAILY FARMS PUT ERROR]', err);
-    res.status(500).json({ error: 'Failed to update daily farm' });
+    res.status(500).json({ error: err.message || 'Failed to update daily farm' });
   }
 });
 
 // DELETE /api/daily-farms/:id – Delete farm (with safety check on dispatched orders)
 router.delete('/:id', verifySupervisor, async (req, res) => {
+  const { id } = req.params;
+  if (!isValidUUID(id)) return res.status(400).json({ error: 'Invalid daily farm ID format' });
+
   try {
     // Check if any orders have been placed using this farm
-    const orders = await pool.query('SELECT COUNT(*) FROM orders WHERE daily_farm_id = $1', [req.params.id]);
+    const orders = await pool.query('SELECT COUNT(*) FROM orders WHERE daily_farm_id = $1', [id]);
     const count = parseInt(orders.rows[0].count, 10);
     if (count > 0) {
       return res.status(400).json({
@@ -207,7 +220,7 @@ router.delete('/:id', verifySupervisor, async (req, res) => {
       });
     }
 
-    const { rows } = await pool.query('DELETE FROM daily_farms WHERE id = $1 RETURNING *', [req.params.id]);
+    const { rows } = await pool.query('DELETE FROM daily_farms WHERE id = $1 RETURNING *', [id]);
     if (!rows.length) {
       return res.status(404).json({ error: 'Daily farm not found' });
     }
@@ -215,7 +228,7 @@ router.delete('/:id', verifySupervisor, async (req, res) => {
     res.json({ message: 'Daily farm deleted successfully', farm: rows[0] });
   } catch (err) {
     console.error('[DAILY FARMS DELETE ERROR]', err);
-    res.status(500).json({ error: 'Failed to delete daily farm' });
+    res.status(500).json({ error: err.message || 'Failed to delete daily farm' });
   }
 });
 
