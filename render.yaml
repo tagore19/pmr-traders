@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: pmr-traders
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTO_MIGRATE
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pmr-traders-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+databases:
+  - name: pmr-traders-db
+    plan: free
+    region: singapore
+    databaseName: pmr_traders
+    user: pmr_admin
