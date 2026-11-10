@@ -11,7 +11,6 @@ export default function DailyRatePage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
 
-  // Load rate for the selected date
   function loadRateForDate(date) {
     setLoading(true);
     setMsg(null);
@@ -27,7 +26,6 @@ export default function DailyRatePage() {
       .finally(() => setLoading(false));
   }
 
-  // Load history list
   function loadHistory() {
     api.rates.getHistory()
       .then(setHistory)
@@ -80,15 +78,18 @@ export default function DailyRatePage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div className="page-title">📋 Daily Paper Rate Management</div>
-        <div className="page-subtitle">Set or edit paper rate for today or any previous / upcoming date</div>
+    <div className="page" style={{ maxWidth: '840px', margin: '0 auto' }}>
+      <div className="page-header" style={{ marginBottom: 16 }}>
+        <h1 className="page-title">
+          <span>📋</span>
+          <span>Daily Paper Rate Management</span>
+        </h1>
+        <p className="page-subtitle">Configure or edit the daily benchmark paper rate for chicken distribution</p>
       </div>
 
       {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
 
-      <div className="grid-2-col" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: 24 }}>
         {/* Form Card */}
         <div className="card">
           <div className="card-header">
@@ -99,10 +100,11 @@ export default function DailyRatePage() {
             {selectedDate < today && <span className="badge badge-amber">Past Date</span>}
             {selectedDate > today && <span className="badge badge-blue">Future Date</span>}
           </div>
+
           <div className="card-body">
             <form onSubmit={handleSave}>
               <div className="form-group">
-                <label className="form-label">Select Date (Pick any past or current date)</label>
+                <label className="form-label">Date</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="date"
@@ -125,183 +127,126 @@ export default function DailyRatePage() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Paper Rate (₹ per kg)</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    id="paper-rate-input"
-                    type="number"
-                    step="0.01"
-                    inputMode="decimal"
-                    className="form-input"
-                    placeholder="e.g. 140.00"
-                    value={paperRateInput}
-                    onChange={e => setPaperRateInput(e.target.value)}
-                    required
-                    style={{ fontSize: 18, fontWeight: 700 }}
-                  />
-                </div>
+                <label className="form-label">Benchmark Paper Rate (₹ per kg)</label>
+                <input
+                  id="paper-rate-input"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  className="form-input"
+                  placeholder="e.g. 132.50"
+                  value={paperRateInput}
+                  onChange={e => setPaperRateInput(e.target.value)}
+                  required
+                  style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'monospace' }}
+                />
               </div>
 
-              <div className="form-actions">
-                <button id="save-rate-btn" className="btn btn-primary" style={{ width: '100%', minHeight: 46 }} disabled={saving || loading}>
-                  {saving ? (
-                    <span className="spinner" />
-                  ) : rate ? (
-                    `✏️ Update Rate for ${selectedDate}`
-                  ) : (
-                    `✅ Set Rate for ${selectedDate}`
-                  )}
-                </button>
-              </div>
+              <button
+                id="save-rate-btn"
+                className="btn btn-primary"
+                style={{ width: '100%', minHeight: 48, fontSize: '14.5px', fontWeight: 800, marginTop: 8 }}
+                disabled={saving || loading}
+              >
+                {saving ? (
+                  <span className="spinner" />
+                ) : rate ? (
+                  `✏️ Update Rate for ${selectedDate}`
+                ) : (
+                  `✅ Set Rate for ${selectedDate}`
+                )}
+              </button>
             </form>
           </div>
         </div>
 
         {/* Live Status Card */}
-        <div className="stat-card blue" style={{ alignSelf: 'stretch', minHeight: 180, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div className="stat-icon">💰</div>
-          <div className="stat-label">Paper Rate for {selectedDate}</div>
-          <div className="stat-value blue" style={{ fontSize: 36, margin: '8px 0' }}>
+        <div
+          className="card"
+          style={{
+            background: 'var(--accent-gold-bg)',
+            border: '1.5px solid var(--accent-gold)',
+            padding: '24px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center'
+          }}
+        >
+          <div style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            Benchmark Paper Rate ({selectedDate})
+          </div>
+
+          <div style={{ fontSize: '42px', fontWeight: 900, color: 'var(--accent-gold)', fontFamily: 'monospace', margin: '8px 0' }}>
             {loading ? '…' : rate ? `₹${parseFloat(rate.paper_rate).toFixed(2)}` : '—'}
           </div>
+
           {loading ? (
             <div className="spinner" />
           ) : rate ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               <div>📅 Configured for: <strong>{rate.date}</strong></div>
               {rate.set_by_name && (
                 <div style={{ marginTop: 4 }}>
-                  👤 Set by: <span className="badge badge-blue">{rate.set_by_name} ({rate.set_by_role})</span>
+                  👤 Set by: <span className="badge badge-gold">{rate.set_by_name}</span>
                 </div>
               )}
             </div>
           ) : (
             <div>
               <span className="badge badge-amber">No rate set for {selectedDate}</span>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                Enter a paper rate and click "Set Rate" to save it for this date.
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: 6, maxWidth: 220 }}>
+                Enter paper rate on the left and tap "Set Rate" to save.
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Rate History Table / Mobile Cards */}
+      {/* History List */}
       <div className="card">
-        <div className="card-header flex-between" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <div>
-            <span className="card-title">📜 Recent Paper Rates History</span>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              Select any past date to view or modify benchmark rate
-            </div>
-          </div>
-          <span className="badge badge-blue">{history.length} records</span>
+        <div className="card-header">
+          <span className="card-title">📜 Recent Paper Rates History</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Tap any date to modify</span>
         </div>
 
-        {/* Desktop Table View */}
-        <div className="table-wrap hide-mobile">
+        <div className="card-body" style={{ padding: '12px' }}>
           {history.length === 0 ? (
-            <div className="empty-state">No rates recorded yet.</div>
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>No rate history recorded yet.</div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Paper Rate</th>
-                  <th>Configured By</th>
-                  <th>Role</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map(h => {
-                  const isCurrent = h.date === selectedDate;
-                  return (
-                    <tr key={h.id} style={isCurrent ? { background: 'rgba(99, 102, 241, 0.08)' } : {}}>
-                      <td className="fw-700">
-                        {h.date} {h.date === today && <span className="badge badge-green" style={{ marginLeft: 6 }}>Today</span>}
-                      </td>
-                      <td className="fw-700 text-accent" style={{ fontSize: 16 }}>
-                        ₹{parseFloat(h.paper_rate).toFixed(2)}
-                      </td>
-                      <td>{h.set_by_name || 'System / Admin'}</td>
-                      <td>
-                        <span className={`badge ${h.set_by_role === 'ADMIN' ? 'badge-blue' : 'badge-amber'}`}>
-                          {h.set_by_role || 'ADMIN'}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className={`btn btn-sm ${isCurrent ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => handleSelectFromHistory(h)}
-                        >
-                          {isCurrent ? 'Viewing' : '✏️ Edit'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Mobile Cards View */}
-        <div className="show-mobile" style={{ padding: '0.75rem' }}>
-          {history.length === 0 ? (
-            <div className="empty-state">No rates recorded yet.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {history.map(h => {
-                const isCurrent = h.date === selectedDate;
-                return (
-                  <div
-                    key={h.id}
-                    onClick={() => handleSelectFromHistory(h)}
-                    style={{
-                      background: isCurrent ? 'rgba(56, 189, 248, 0.1)' : '#0f172a',
-                      border: `1px solid ${isCurrent ? '#38bdf8' : '#334155'}`,
-                      borderRadius: '12px',
-                      padding: '0.85rem 1rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc' }}>{h.date}</span>
-                        {h.date === today && <span className="badge badge-green" style={{ fontSize: '10px', padding: '1px 6px' }}>Today</span>}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
-                        By {h.set_by_name || 'Admin'}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
-                          ₹{parseFloat(h.paper_rate).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>per kg</div>
-                      </div>
-
-                      <button
-                        className={`btn btn-sm ${isCurrent ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectFromHistory(h);
-                        }}
-                      >
-                        {isCurrent ? 'Active' : '✏️'}
-                      </button>
-                    </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {history.map(h => (
+                <div
+                  key={h.date}
+                  onClick={() => handleSelectFromHistory(h)}
+                  style={{
+                    background: h.date === selectedDate ? 'var(--primary-tint)' : 'var(--bg-subtle)',
+                    border: `1px solid ${h.date === selectedDate ? 'var(--primary)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>
+                      📅 {h.date}
+                    </span>
+                    {h.date === today && <span className="badge badge-green">Today</span>}
                   </div>
-                );
-              })}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontWeight: 900, fontSize: '16px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>
+                      ₹{parseFloat(h.paper_rate).toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>👉 Edit</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

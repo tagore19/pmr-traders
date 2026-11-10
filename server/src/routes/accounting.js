@@ -255,6 +255,51 @@ router.get('/customers/:id/ledger', verifySupervisor, async (req, res) => {
   }
 });
 
+// GET /api/payments – Fetch recent customer payment receipts
+router.get('/payments', verifySupervisor, async (req, res) => {
+  const { date, customer_id, limit = 50 } = req.query;
+  const params = [];
+  let query = `
+    SELECT cp.*, c.name as customer_name, u.name as collected_by_name, g.name as group_name
+    FROM customer_payments cp
+    JOIN customers c ON c.id = cp.customer_id
+    LEFT JOIN users u ON u.id = cp.created_by
+    LEFT JOIN groups g ON g.id = cp.group_id
+    WHERE 1=1
+  `;
+
+  if (req.user.role !== 'ADMIN') {
+    let gid = req.user.group_id;
+    if (!gid) {
+      const u = await pool.query('SELECT group_id FROM users WHERE id = $1', [req.user.id]);
+      gid = u.rows[0]?.group_id;
+    }
+    params.push(gid);
+    query += ` AND cp.group_id = $${params.length}`;
+  }
+
+  if (date && isValidDateString(date)) {
+    params.push(date);
+    query += ` AND cp.payment_date = $${params.length}`;
+  }
+
+  if (customer_id && isValidUUID(customer_id)) {
+    params.push(customer_id);
+    query += ` AND cp.customer_id = $${params.length}`;
+  }
+
+  query += ` ORDER BY cp.payment_date DESC, cp.created_at DESC LIMIT $${params.length + 1}`;
+  params.push(Math.min(parseInt(limit, 10) || 50, 200));
+
+  try {
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('[PAYMENTS GET ERROR]', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch payments' });
+  }
+});
+
 // POST /api/payments – Record customer cash / bank receipt
 router.post('/payments', verifySupervisor, async (req, res) => {
   const { customer_id, payment_date, amount_paid, payment_mode, notes } = req.body;

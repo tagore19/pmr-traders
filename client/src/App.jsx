@@ -4,43 +4,45 @@ import LoginPage from './pages/LoginPage';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import DashboardPage from './pages/DashboardPage';
-import DailyRatePage from './pages/DailyRatePage';
+import SalesPage from './pages/SalesPage';
 import CustomersPage from './pages/CustomersPage';
-import OrdersPage from './pages/OrdersPage';
-import NewOrderPage from './pages/NewOrderPage';
+import PaymentsPage from './pages/PaymentsPage';
 import DailyFarmsPage from './pages/DailyFarmsPage';
+import DailyRatePage from './pages/DailyRatePage';
 import DailySheetPage from './pages/DailySheetPage';
 import GroupSummaryPage from './pages/GroupSummaryPage';
 
 function AppContent() {
   const { user, isAdmin } = useAuth();
-  const [page, setPage] = useState(isAdmin ? 'dashboard' : 'new-order');
+  const [page, setPage] = useState(isAdmin ? 'dashboard' : 'sales');
 
   if (!user) return <LoginPage />;
 
   const renderPage = () => {
     switch (page) {
-      case 'dashboard':     return <DashboardPage />;
-      case 'rate':          return <DailyRatePage />;
+      case 'dashboard':     return <DashboardPage onNavigate={setPage} />;
+      case 'sales':         return <SalesPage onNavigate={setPage} initialTab="new" />;
+      case 'new-order':     return <SalesPage onNavigate={setPage} initialTab="new" />;
+      case 'orders':        return <SalesPage onNavigate={setPage} initialTab="orders" />;
+      case 'customers':     return <CustomersPage onNavigate={setPage} />;
+      case 'payments':      return <PaymentsPage onNavigate={setPage} />;
       case 'daily-farms':   return <DailyFarmsPage onNavigate={setPage} />;
-      case 'daily-sheet':   return <DailySheetPage />;
+      case 'rate':          return <DailyRatePage onNavigate={setPage} />;
+      case 'daily-sheet':   return <DailySheetPage onNavigate={setPage} />;
       case 'group-summary': return <GroupSummaryPage onSelectCustomer={() => setPage('customers')} />;
-      case 'customers':     return <CustomersPage />;
-      case 'orders':        return <OrdersPage />;
-      case 'new-order':     return <NewOrderPage onNavigate={setPage} />;
-      default:              return <DashboardPage />;
+      default:              return <DashboardPage onNavigate={setPage} />;
     }
   };
 
   return (
     <div className="app-shell">
-      {/* Mobile Top Header & Bottom Navigation */}
+      {/* Mobile Top Header & Fixed 5-Tab Bottom Navigation */}
       <MobileNav currentPage={page} onNavigate={setPage} />
 
-      {/* Desktop Sidebar */}
+      {/* Tablet & Desktop Sidebar */}
       <Sidebar currentPage={page} onNavigate={setPage} />
 
-      {/* Main Content Area */}
+      {/* Main Scrollable Content Area */}
       <main className="main-content">
         {renderPage()}
       </main>

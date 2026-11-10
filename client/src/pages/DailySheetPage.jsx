@@ -49,12 +49,12 @@ export default function DailySheetPage() {
   return (
     <div className="page" style={{ maxWidth: 1200, margin: '0 auto' }}>
       {/* Non-print controls bar */}
-      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem 1.25rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#f8fafc' }}>
+          <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>
             🖨️ Daily Farm-Wise Distribution Sheet
           </h1>
-          <p style={{ margin: '0.2rem 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
+          <p style={{ margin: '0.2rem 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             Formatted for official A4 printing and PDF generation per supervisor team.
           </p>
         </div>
@@ -62,46 +62,41 @@ export default function DailySheetPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
             {isAdmin && (
-              <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.4rem 0.75rem' }}>
-                <span style={{ marginRight: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>👥 Group:</span>
+              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.75rem' }}>
+                <span style={{ marginRight: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>👥 Group:</span>
                 <select
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
                 >
                   {groups.map(g => (
-                    <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name}</option>
+                    <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
                 </select>
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.4rem 0.75rem' }}>
-              <span style={{ marginRight: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>📅 Date:</span>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.75rem' }}>
+              <span style={{ marginRight: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>📅 Date:</span>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
               />
             </div>
           </div>
 
           <button
             onClick={handlePrint}
+            className="btn btn-primary"
             style={{
-              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-              color: '#ffffff',
-              border: 'none',
               padding: '0.55rem 1.25rem',
-              borderRadius: '8px',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '0.9rem',
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+              gap: '0.5rem'
             }}
           >
             <span>🖨️</span> Print / Save PDF
@@ -110,18 +105,18 @@ export default function DailySheetPage() {
       </div>
 
       {error && (
-        <div className="no-print" style={{ background: '#450a0a', border: '1px solid #dc2626', color: '#fecaca', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem' }}>
+        <div className="alert alert-danger no-print">
           ⚠️ {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>Generating distribution sheet...</div>
+        <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Generating distribution sheet...</div>
       ) : !sheetData || sheetData.farms.length === 0 ? (
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '3.5rem', textAlign: 'center' }}>
+        <div className="card no-print" style={{ padding: '3.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📋</div>
-          <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: '1.1rem' }}>No orders recorded for {selectedDate}</div>
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem', maxWidth: '420px', margin: '0.5rem auto' }}>
+          <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.1rem' }}>No orders recorded for {selectedDate}</div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '420px', margin: '0.5rem auto' }}>
             There are no customer delivery orders placed for {sheetData?.group_name || 'this group'} on this date yet.
           </p>
         </div>
@@ -350,14 +345,14 @@ export default function DailySheetPage() {
             bottom: '80px',
             right: '18px',
             zIndex: 90,
-            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+            background: 'var(--primary)',
             color: '#ffffff',
             border: 'none',
             borderRadius: '50px',
             padding: '0.75rem 1.35rem',
             fontWeight: 800,
             fontSize: '0.95rem',
-            boxShadow: '0 8px 24px rgba(2, 132, 199, 0.5)',
+            boxShadow: '0 8px 24px var(--primary-glow)',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',

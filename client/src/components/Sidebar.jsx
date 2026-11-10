@@ -1,28 +1,30 @@
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const adminNav = [
-  { icon: '📊', label: 'Dashboard',          page: 'dashboard' },
-  { icon: '📋', label: 'Paper Rate',         page: 'rate' },
+  { icon: '🏠', label: 'Dashboard',          page: 'dashboard' },
+  { icon: '👥', label: 'Customers & Ledger', page: 'customers' },
+  { icon: '📝', label: 'Sales & Drops',      page: 'sales' },
+  { icon: '💵', label: 'Payments',           page: 'payments' },
   { icon: '🚜', label: 'Daily Farms',        page: 'daily-farms' },
-  { icon: '📝', label: 'New Order Drop',     page: 'new-order' },
+  { icon: '📋', label: 'Paper Rate',         page: 'rate' },
   { icon: '🖨️', label: 'Daily Sheet (PDF)',  page: 'daily-sheet' },
   { icon: '📑', label: 'Group Summary',      page: 'group-summary' },
-  { icon: '👥', label: 'Customers & Ledger', page: 'customers' },
-  { icon: '🛒', label: 'Sales Register',     page: 'orders' },
 ];
 
 const supervisorNav = [
-  { icon: '📝', label: 'New Order Drop',     page: 'new-order' },
-  { icon: '🚜', label: 'Daily Farms',        page: 'daily-farms' },
-  { icon: '🖨️', label: 'Daily Sheet (PDF)',  page: 'daily-sheet' },
-  { icon: '📋', label: 'Paper Rate',         page: 'rate' },
+  { icon: '📝', label: 'Sales & Drops',      page: 'sales' },
   { icon: '👥', label: 'Customers & Ledger', page: 'customers' },
+  { icon: '💵', label: 'Payments',           page: 'payments' },
+  { icon: '🚜', label: 'Daily Farms',        page: 'daily-farms' },
+  { icon: '📋', label: 'Paper Rate',         page: 'rate' },
+  { icon: '🖨️', label: 'Daily Sheet (PDF)',  page: 'daily-sheet' },
   { icon: '📑', label: 'Group Summary',      page: 'group-summary' },
-  { icon: '🛒', label: 'My Orders',          page: 'orders' },
 ];
 
 export default function Sidebar({ currentPage, onNavigate }) {
   const { user, logout, isAdmin } = useAuth();
+  const { toggleTheme, isDark } = useTheme();
   const navItems = isAdmin ? adminNav : supervisorNav;
 
   return (
@@ -39,7 +41,7 @@ export default function Sidebar({ currentPage, onNavigate }) {
         {isAdmin ? '👑 Admin Owner' : `🚚 ${user?.name || 'Supervisor'}`}
       </div>
 
-      {navItems.map(item => (
+      {navItems.map((item) => (
         <button
           key={item.page}
           className={`nav-item ${currentPage === item.page ? 'active' : ''}`}
@@ -51,6 +53,15 @@ export default function Sidebar({ currentPage, onNavigate }) {
       ))}
 
       <div className="sidebar-bottom">
+        <button
+          onClick={toggleTheme}
+          className="btn btn-secondary btn-sm"
+          style={{ width: '100%', justifyContent: 'center', gap: '8px', minHeight: '38px' }}
+        >
+          <span>{isDark ? '☀️' : '🌙'}</span>
+          <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
+        </button>
+
         <div className="user-chip">
           <div className="user-avatar">{user?.name?.[0]?.toUpperCase()}</div>
           <div className="user-info">
@@ -58,7 +69,14 @@ export default function Sidebar({ currentPage, onNavigate }) {
             <div className="user-role">{user?.role}</div>
           </div>
         </div>
-        <button className="logout-btn" onClick={logout}>⬅ Sign Out</button>
+
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ width: '100%', color: 'var(--red)', borderColor: 'var(--border)' }}
+          onClick={logout}
+        >
+          ⬅ Sign Out
+        </button>
       </div>
     </aside>
   );

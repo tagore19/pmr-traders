@@ -2,26 +2,35 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 
-export default function DashboardPage() {
+export default function DashboardPage({ onNavigate }) {
   const { isAdmin } = useAuth();
   const [todayRate, setTodayRate] = useState(null);
   const [orders, setOrders] = useState([]);
   const [dailyFarms, setDailyFarms] = useState([]);
+  const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const today = new Date().toISOString().split('T')[0];
-  const todayLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const todayLabel = new Date().toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 
   useEffect(() => {
     (async () => {
       try {
-        const [rate, ord, farms] = await Promise.all([
+        const [rate, ord, farms, sum] = await Promise.all([
           api.rates.getTodayRate().catch(() => null),
           api.supervisor.getOrders(today).catch(() => []),
           api.dailyFarms.getByDate(today).catch(() => []),
+          api.accounting.getGroupSummary().catch(() => null),
         ]);
         setTodayRate(rate);
         setOrders(ord);
         setDailyFarms(farms);
+        setSummaryData(sum);
       } finally {
         setLoading(false);
       }
@@ -37,250 +46,309 @@ export default function DashboardPage() {
   const totalProcurementCost = dailyFarms.reduce((s, f) => s + (parseFloat(f.total_procurement_cost) || 0), 0);
   const grossMargin = totalAmt - totalProcurementCost;
 
+  // Outstanding due from group summary
+  const rows = summaryData?.rows || [];
+  const totalOutstandingDue = rows
+    .filter(r => r.closing_balance_type === 'Dr')
+    .reduce((sum, r) => sum + r.closing_balance, 0);
+
   return (
-    <div className="page" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div className="page-header" style={{ marginBottom: '1.25rem' }}>
-        <div className="page-title" style={{ fontSize: '1.6rem', fontWeight: 700 }}>📊 Operations Dashboard</div>
-        <div className="page-subtitle" style={{ color: '#94a3b8', fontSize: '0.9rem' }}>{todayLabel} • Real-time PMR Distribution Monitor</div>
+    <div className="page" style={{ maxWidth: '960px', margin: '0 auto' }}>
+      {/* Page Header */}
+      <div className="page-header" style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 className="page-title">
+              <span>🏠</span>
+              <span>PMR Dashboard</span>
+            </h1>
+            <p className="page-subtitle">
+              {todayLabel} • Live Daily Operations & Ledger
+            </p>
+          </div>
+
+          {todayRate && (
+            <div style={{
+              background: 'var(--accent-gold-bg)',
+              border: '1.5px solid var(--accent-gold)',
+              borderRadius: 'var(--radius)',
+              padding: '6px 12px',
+              textAlign: 'right'
+            }}>
+              <div style={{ fontSize: '10px', color: 'var(--accent-gold)', fontWeight: 800, textTransform: 'uppercase' }}>
+                Paper Rate
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--accent-gold)', fontFamily: 'monospace' }}>
+                ₹{parseFloat(todayRate.paper_rate).toFixed(2)}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Warning banner if paper rate not set */}
       {!todayRate && !loading && (
-        <div className="alert alert-warning" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', color: '#fbbf24', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem' }}>
-          ⚠️ Today's Paper Rate has not been set yet. Supervisors cannot place orders until today's rate is configured.
+        <div
+          className="alert alert-warning"
+          style={{ cursor: 'pointer' }}
+          onClick={() => onNavigate && onNavigate('rate')}
+        >
+          <span>⚠️ Today's Paper Rate is not set yet. <strong>Tap here to configure today's paper rate.</strong></span>
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="stats-grid">
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.15rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' }}>Today's Paper Rate</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem' }}>
-            ₹{todayRate ? parseFloat(todayRate.paper_rate).toFixed(2) : '—'}
+      {/* Primary Financial Overview Hero Card */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, var(--primary) 0%, #102B23 100%)',
+          color: '#FFFFFF',
+          borderRadius: 'var(--radius-lg)',
+          padding: '20px 22px',
+          boxShadow: 'var(--shadow)',
+          marginBottom: '18px',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.85, fontWeight: 700 }}>
+          Today's Billed Sales Revenue
+        </div>
+        <div style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '-0.5px', marginTop: '4px' }}>
+          ₹{loading ? '…' : totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '10px', fontSize: '13px', opacity: 0.9 }}>
+          <span>📦 <strong>{totalBoxes}</strong> boxes sold</span>
+          <span>•</span>
+          <span>⚖️ <strong>{totalKg.toFixed(1)}</strong> kg net</span>
+          <span>•</span>
+          <span>🚚 <strong>{orders.length}</strong> drops</span>
+        </div>
+      </div>
+
+      {/* Quick Action Buttons (Thumb Zone) */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '8px',
+        marginBottom: '20px'
+      }}>
+        <button
+          onClick={() => onNavigate && onNavigate('sales')}
+          className="btn btn-secondary"
+          style={{
+            flexDirection: 'column',
+            padding: '10px 4px',
+            minHeight: '68px',
+            borderRadius: 'var(--radius)',
+            gap: '4px',
+            background: 'var(--bg-card)'
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>📝</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>New Drop</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate && onNavigate('payments')}
+          className="btn btn-secondary"
+          style={{
+            flexDirection: 'column',
+            padding: '10px 4px',
+            minHeight: '68px',
+            borderRadius: 'var(--radius)',
+            gap: '4px',
+            background: 'var(--bg-card)'
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>💵</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>Receive ₹</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate && onNavigate('customers')}
+          className="btn btn-secondary"
+          style={{
+            flexDirection: 'column',
+            padding: '10px 4px',
+            minHeight: '68px',
+            borderRadius: 'var(--radius)',
+            gap: '4px',
+            background: 'var(--bg-card)'
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>👥</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>Customers</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate && onNavigate('daily-farms')}
+          className="btn btn-secondary"
+          style={{
+            flexDirection: 'column',
+            padding: '10px 4px',
+            minHeight: '68px',
+            borderRadius: 'var(--radius)',
+            gap: '4px',
+            background: 'var(--bg-card)'
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>🚜</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>Farms</span>
+        </button>
+      </div>
+
+      {/* KPI Metric Cards */}
+      <div className="stats-grid" style={{ marginBottom: '20px' }}>
+        <div className="stat-card">
+          <div className="stat-label">Total Outstanding Debt</div>
+          <div className="stat-value" style={{ color: 'var(--red)', fontSize: '22px' }}>
+            ₹{loading ? '…' : totalOutstandingDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>Benchmark rate</div>
+          <div className="stat-sub">Pending customer balance (Dr)</div>
         </div>
 
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.15rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' }}>Daily Farms Intake</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.25rem', fontFamily: 'monospace' }}>
+        <div className="stat-card">
+          <div className="stat-label">Farm Intake Inflow</div>
+          <div className="stat-value" style={{ fontSize: '22px' }}>
             {loading ? '…' : totalProcuredKg.toFixed(1)} kg
           </div>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>
-            {totalProcuredBoxes} b • {dailyFarms.length} farm(s)
-          </div>
+          <div className="stat-sub">{totalProcuredBoxes} boxes loaded ({dailyFarms.length} farms)</div>
         </div>
 
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.15rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' }}>Orders Dispatched</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981', marginTop: '0.25rem' }}>
-            {loading ? '…' : `${orders.length} drops`}
-          </div>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>
-            {totalBoxes} b • {totalKg.toFixed(1)} kg
-          </div>
-        </div>
-
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.15rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' }}>Total Billed Today</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem', fontFamily: 'monospace' }}>
-            ₹{loading ? '…' : totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>Gross sales value</div>
-        </div>
-
-        {/* Admin Only KPI Cards */}
+        {/* Admin Financial KPIs */}
         {isAdmin && (
           <>
-            <div style={{ background: '#1e293b', border: '1.5px solid #0284c7', borderRadius: '12px', padding: '1rem 1.15rem' }}>
+            <div className="stat-card" style={{ borderLeft: '3px solid var(--accent-gold)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#38bdf8', fontSize: '0.78rem', textTransform: 'uppercase', fontWeight: 700 }}>
-                  🔐 Farm Cost
-                </span>
-                <span style={{ fontSize: '0.65rem', background: '#0369a1', color: '#f0f9ff', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
-                  ADMIN
-                </span>
+                <span className="stat-label">🔐 Farm Purchase Cost</span>
+                <span className="badge badge-gold" style={{ fontSize: '9px' }}>ADMIN</span>
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.25rem', fontFamily: 'monospace' }}>
+              <div className="stat-value" style={{ fontSize: '22px' }}>
                 ₹{loading ? '…' : totalProcurementCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>Intake payable</div>
+              <div className="stat-sub">Procurement payable</div>
             </div>
 
-            <div style={{ background: '#1e293b', border: `1.5px solid ${grossMargin >= 0 ? '#059669' : '#dc2626'}`, borderRadius: '12px', padding: '1rem 1.15rem' }}>
+            <div className="stat-card" style={{ borderLeft: `3px solid ${grossMargin >= 0 ? 'var(--green)' : 'var(--red)'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: grossMargin >= 0 ? '#34d399' : '#f87171', fontSize: '0.78rem', textTransform: 'uppercase', fontWeight: 700 }}>
-                  🔐 Gross Margin
-                </span>
-                <span style={{ fontSize: '0.65rem', background: grossMargin >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', color: grossMargin >= 0 ? '#34d399' : '#f87171', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
-                  ADMIN
-                </span>
+                <span className="stat-label">🔐 Gross Trading Margin</span>
+                <span className="badge badge-green" style={{ fontSize: '9px' }}>ADMIN</span>
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: grossMargin >= 0 ? '#10b981' : '#ef4444', marginTop: '0.25rem', fontFamily: 'monospace' }}>
+              <div className="stat-value" style={{ color: grossMargin >= 0 ? 'var(--green)' : 'var(--red)', fontSize: '22px' }}>
                 {grossMargin >= 0 ? '+' : ''}₹{loading ? '…' : grossMargin.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.2rem' }}>Sales minus Farm Cost</div>
+              <div className="stat-sub">Sales revenue minus farm cost</div>
             </div>
           </>
         )}
       </div>
 
-      {/* Procurement Farms Live Status */}
+      {/* Farm Procurement Status Strip */}
       {dailyFarms.length > 0 && (
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-          <div style={{ fontWeight: 600, color: '#f8fafc', marginBottom: '0.75rem', fontSize: '0.95rem' }}>
-            🌾 Today's Farm Procurement Inflow ({dailyFarms.length} active)
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="card-title">🚜 Today's Farm Trucks ({dailyFarms.length})</span>
+            <button
+              onClick={() => onNavigate && onNavigate('daily-farms')}
+              style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 700, textDecoration: 'underline' }}
+            >
+              Manage
+            </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.75rem' }}>
-            {dailyFarms.map(f => {
-              const weight = parseFloat(f.total_weight_kg) || 0;
-              const disp = parseFloat(f.total_dispatched_kg) || 0;
-              const rem = weight - disp;
-              const rate = parseFloat(f.rate_per_kg) || 0;
-              const cost = parseFloat(f.total_procurement_cost) || 0;
 
-              return (
-                <div key={f.id} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 700, color: '#f8fafc' }}>{f.farm_name}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', background: '#1e293b', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
-                      {f.vehicle_no || 'Direct'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: '0.4rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Procured: {weight.toFixed(1)} kg ({f.total_boxes} b)</span>
-                    <span style={{ color: rem < 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>
-                      Left: {rem.toFixed(1)} kg
-                    </span>
-                  </div>
+          <div className="card-body" style={{ padding: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {dailyFarms.map((f) => {
+                const rem = parseFloat(f.remaining_kg) || 0;
+                const remBoxes = parseInt(f.remaining_boxes, 10) || 0;
+                return (
+                  <div
+                    key={f.id}
+                    style={{
+                      background: 'var(--bg-subtle)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {f.farm_name} {f.vehicle_no ? `(${f.vehicle_no})` : ''}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Intake: {parseFloat(f.total_weight_kg).toFixed(1)} kg ({f.total_boxes} b)
+                        {f.weight_loss_kg > 0 ? ` • 📉 Loss: ${parseFloat(f.weight_loss_kg).toFixed(1)} kg` : ''}
+                      </div>
+                    </div>
 
-                  {/* Admin Only Purchase Rate & Cost */}
-                  {isAdmin && (
-                    <div style={{ marginTop: '0.45rem', paddingTop: '0.35rem', borderTop: '1px dashed #334155', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                      <span style={{ color: '#38bdf8', fontWeight: 600 }}>
-                        {rate > 0 ? `Rate: ₹${rate.toFixed(2)}/kg` : 'Rate: Not set'}
-                      </span>
-                      <span style={{ color: '#10b981', fontWeight: 700, fontFamily: 'monospace' }}>
-                        Cost: ₹{cost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <div>
+                      <span className={`badge ${remBoxes === 0 ? 'badge-green' : 'badge-blue'}`} style={{ fontSize: '11.5px' }}>
+                        {remBoxes === 0 ? '✅ All Dropped' : `🚚 ${remBoxes} b left (${rem.toFixed(1)} kg)`}
                       </span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Today's Recent Orders: Desktop Table + Mobile Cards */}
-      <div className="card" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', overflow: 'hidden' }}>
-        <div className="card-header" style={{ padding: '0.9rem 1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="card-title" style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc' }}>Today's Orders Register</span>
-          <span className="badge badge-blue" style={{ background: '#0369a1', color: '#f0f9ff', padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
-            {orders.length} orders
-          </span>
+      {/* Recent Dispatched Drops */}
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="card-title">📋 Today's Delivery Drops ({orders.length})</span>
+          <button
+            onClick={() => onNavigate && onNavigate('sales')}
+            style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 700, textDecoration: 'underline' }}
+          >
+            View Register
+          </button>
         </div>
 
-        {/* Desktop Table View */}
-        <div className="table-wrap hide-mobile">
+        <div className="card-body" style={{ padding: '12px' }}>
           {loading ? (
-            <div className="empty-state" style={{ padding: '3rem', textAlign: 'center' }}><div className="spinner" /></div>
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>Loading orders…</div>
           ) : orders.length === 0 ? (
-            <div className="empty-state" style={{ padding: '3.5rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📭</div>
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
               No orders logged today yet.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
-              <thead>
-                <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  <th style={{ padding: '0.65rem 1rem' }}>Vch #</th>
-                  <th style={{ padding: '0.65rem 1rem' }}>Customer</th>
-                  <th style={{ padding: '0.65rem 1rem' }}>Farm</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'center' }}>Boxes</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>KG</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Final Rate</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Total Amount</th>
-                  <th style={{ padding: '0.65rem 1rem' }}>Supervisor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map(o => {
-                  return (
-                    <tr key={o.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '0.65rem 1rem', fontFamily: 'monospace', fontWeight: 700, color: '#38bdf8' }}>
-                        #{o.voucher_no}
-                      </td>
-                      <td style={{ padding: '0.65rem 1rem', fontWeight: 700, color: '#f8fafc' }}>{o.customer_name}</td>
-                      <td style={{ padding: '0.65rem 1rem', color: '#cbd5e1' }}>🌾 {o.farm_name || 'Direct'}</td>
-                      <td style={{ padding: '0.65rem 1rem', textAlign: 'center', fontWeight: 600 }}>{o.boxes} b</td>
-                      <td style={{ padding: '0.65rem 1rem', textAlign: 'right', fontFamily: 'monospace' }}>{parseFloat(o.weight_kg).toFixed(2)}</td>
-                      <td style={{ padding: '0.65rem 1rem', textAlign: 'right', fontFamily: 'monospace', color: '#10b981', fontWeight: 700 }}>
-                        ₹{parseFloat(o.final_rate).toFixed(2)}
-                      </td>
-                      <td style={{ padding: '0.65rem 1rem', textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, color: '#38bdf8' }}>
-                        ₹{parseFloat(o.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '0.65rem 1rem', color: '#94a3b8', fontSize: '0.8rem' }}>{o.supervisor_name || '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Mobile Cards View */}
-        <div className="show-mobile" style={{ padding: '0.75rem' }}>
-          {loading ? (
-            <div className="empty-state" style={{ padding: '2.5rem', textAlign: 'center' }}><div className="spinner" /></div>
-          ) : orders.length === 0 ? (
-            <div className="empty-state" style={{ padding: '2.5rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📭</div>
-              No orders logged today yet.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {orders.map(o => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {orders.slice(0, 5).map((o) => (
                 <div
                   key={o.id}
                   style={{
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '12px',
-                    padding: '0.9rem',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem'
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '8px'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#38bdf8', fontSize: '0.92rem' }}>
-                      #{o.voucher_no}
-                    </span>
-                    <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
-                      ₹{parseFloat(o.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc' }}>
-                    {o.customer_name}
-                  </div>
-
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                    🌾 {o.farm_name || 'Direct'}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', borderRadius: '8px', padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}>
-                    <span>📦 <strong>{o.boxes} b</strong></span>
-                    <span>⚖️ <strong>{parseFloat(o.weight_kg).toFixed(2)} kg</strong></span>
-                    <span>Rate: <strong style={{ color: '#10b981' }}>₹{parseFloat(o.final_rate).toFixed(2)}</strong></span>
-                  </div>
-
-                  {o.supervisor_name && (
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', textAlign: 'right' }}>
-                      Logged by: {o.supervisor_name}
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>
+                      {o.customer_name}
                     </div>
-                  )}
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Voucher #{o.voucher_no} • {o.boxes} b • {parseFloat(o.weight_kg).toFixed(1)} kg @ ₹{parseFloat(o.final_rate).toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                      ₹{parseFloat(o.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

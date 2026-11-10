@@ -61,6 +61,10 @@ export const api = {
       const qs = new URLSearchParams(params).toString();
       return request('GET', `/customers/${customerId}/ledger${qs ? '?' + qs : ''}`);
     },
+    getPayments: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request('GET', `/payments${qs ? '?' + qs : ''}`);
+    },
     createPayment: (data) => request('POST', '/payments', data),
     deletePayment: (id) => request('DELETE', `/payments/${id}`),
     createCreditNote: (data) => request('POST', '/credit-notes', data),

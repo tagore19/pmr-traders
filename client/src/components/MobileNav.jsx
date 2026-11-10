@@ -1,223 +1,323 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function MobileNav({ currentPage, onNavigate }) {
   const { user, logout, isAdmin } = useAuth();
-  const [showMenu, setShowMenu] = useState(false);
+  const { theme, toggleTheme, isDark } = useTheme();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  const mainTabs = isAdmin ? [
-    { id: 'dashboard',   label: 'Dashboard', icon: '📊' },
-    { id: 'daily-farms', label: 'Farms',     icon: '🚜' },
-    { id: 'new-order',   label: 'New Drop',  icon: '📝' },
-    { id: 'daily-sheet', label: 'Sheet',     icon: '🖨️' },
+  const mainTabs = [
+    { id: 'dashboard',   label: 'Home',      icon: '🏠' },
     { id: 'customers',   label: 'Customers', icon: '👥' },
-  ] : [
-    { id: 'new-order',   label: 'New Drop',  icon: '📝' },
-    { id: 'daily-farms', label: 'Farms',     icon: '🚜' },
-    { id: 'daily-sheet', label: 'Sheet',     icon: '🖨️' },
-    { id: 'customers',   label: 'Customers', icon: '👥' },
+    { id: 'sales',       label: 'Sales',     icon: '📝' },
+    { id: 'payments',    label: 'Payments',  icon: '💵' },
+    { id: 'more',        label: 'More',      icon: '☰' },
   ];
 
-  const handleTabClick = (pageId) => {
-    setShowMenu(false);
+  const handleTabClick = (tabId) => {
+    if (tabId === 'more') {
+      setShowMoreMenu(true);
+      return;
+    }
+    setShowMoreMenu(false);
+    onNavigate(tabId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDrawerNavigate = (pageId) => {
+    setShowMoreMenu(false);
     onNavigate(pageId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Determine current active bottom tab
+  const getActiveTab = () => {
+    if (currentPage === 'dashboard') return 'dashboard';
+    if (currentPage === 'customers') return 'customers';
+    if (currentPage === 'sales' || currentPage === 'new-order' || currentPage === 'orders') return 'sales';
+    if (currentPage === 'payments') return 'payments';
+    return 'more';
+  };
+
+  const activeTabId = getActiveTab();
+
   return (
     <>
-      {/* Mobile Top Header */}
+      {/* Top App Bar */}
       <header className="mobile-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+          <div style={{
+            width: 34,
+            height: 34,
+            background: 'var(--primary)',
+            color: '#FFFFFF',
+            borderRadius: '9px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '17px',
+            boxShadow: '0 2px 8px var(--primary-glow)'
+          }}>
             🐔
           </div>
           <div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc', lineHeight: 1.2 }}>PMR Traders</div>
-            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-              {isAdmin ? 'Admin' : user?.name || 'Supervisor'}
+            <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.15, letterSpacing: '-0.3px' }}>
+              PMR Traders
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>
+              {isAdmin ? '👑 Admin' : `🚚 ${user?.name || 'Supervisor'}`}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Daily Rate Pill */}
           <button
-            onClick={() => handleTabClick('rate')}
-            className="mobile-header-btn"
+            onClick={() => handleDrawerNavigate('rate')}
             style={{
-              background: currentPage === 'rate' ? '#38bdf8' : '#1e293b',
-              color: currentPage === 'rate' ? '#0f172a' : '#f8fafc',
-              border: '1px solid #334155',
+              background: currentPage === 'rate' ? 'var(--accent-gold)' : 'var(--bg-elevated)',
+              color: currentPage === 'rate' ? '#FFFFFF' : 'var(--text-primary)',
+              border: '1px solid var(--border)',
               padding: '6px 10px',
-              borderRadius: '8px',
-              fontSize: '12px',
+              borderRadius: '999px',
+              fontSize: '11.5px',
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               gap: '4px'
             }}
+            title="Today's Paper Rate"
           >
-            📋 Rate
+            <span>📋</span>
+            <span>Rate</span>
           </button>
 
+          {/* Dark / Light Mode Toggle Button */}
           <button
-            onClick={() => setShowMenu(true)}
-            className="mobile-header-btn"
+            onClick={toggleTheme}
             style={{
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#f8fafc',
-              padding: '6px 10px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 700
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+              cursor: 'pointer'
             }}
-            title="More Options"
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Theme"
           >
-            ☰
+            {isDark ? '☀️' : '🌙'}
           </button>
         </div>
       </header>
 
-      {/* Slide-up Menu Drawer for More items */}
-      {showMenu && (
+      {/* Slide-Up Bottom Sheet Drawer for "More" Navigation */}
+      {showMoreMenu && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'flex-end',
-            animation: 'fadeIn 0.2s ease'
-          }}
-          onClick={() => setShowMenu(false)}
+          className="modal-overlay"
+          onClick={() => setShowMoreMenu(false)}
         >
           <div
-            style={{
-              background: '#1e293b',
-              borderTopLeftRadius: '20px',
-              borderTopRightRadius: '20px',
-              borderTop: '1px solid #475569',
-              padding: '1.25rem 1.25rem 2rem',
-              maxHeight: '80vh',
-              overflowY: 'auto',
-              boxShadow: '0 -10px 25px rgba(0,0,0,0.5)'
-            }}
-            onClick={e => e.stopPropagation()}
+            className="modal"
+            style={{ maxWidth: '520px' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ width: '40px', height: '4px', background: '#475569', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
+            {/* Grab handle */}
+            <div style={{
+              width: '38px',
+              height: '4px',
+              background: 'var(--border)',
+              borderRadius: '2px',
+              margin: '10px auto 14px'
+            }} />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '0 18px 14px',
+              borderBottom: '1px solid var(--border)'
+            }}>
               <div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>PMR Navigation Menu</div>
-                <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Logged in as {user?.name}</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  PMR Operations Menu
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                  Logged in as {user?.name} ({isAdmin ? 'Admin' : 'Supervisor'})
+                </div>
               </div>
               <button
-                onClick={() => setShowMenu(false)}
-                style={{ background: '#334155', border: 'none', color: '#f8fafc', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1rem', cursor: 'pointer' }}
+                onClick={() => setShowMoreMenu(false)}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  fontSize: '16px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.25rem' }}>
-              <button
-                onClick={() => handleTabClick('dashboard')}
-                style={{ background: currentPage === 'dashboard' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>📊</div>
-                Dashboard
-              </button>
+            <div className="modal-body" style={{ padding: '16px 18px 24px' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '10px',
+                marginBottom: '18px'
+              }}>
+                <button
+                  onClick={() => handleDrawerNavigate('daily-farms')}
+                  style={{
+                    background: currentPage === 'daily-farms' ? 'var(--primary-tint)' : 'var(--bg-card)',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
+                    textAlign: 'left',
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>🚜</span>
+                  <span style={{ fontWeight: 700, fontSize: '13px' }}>Daily Farms</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Procurement & Loss</span>
+                </button>
 
-              <button
-                onClick={() => handleTabClick('new-order')}
-                style={{ background: currentPage === 'new-order' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>📝</div>
-                New Drop
-              </button>
+                <button
+                  onClick={() => handleDrawerNavigate('daily-sheet')}
+                  style={{
+                    background: currentPage === 'daily-sheet' ? 'var(--primary-tint)' : 'var(--bg-card)',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
+                    textAlign: 'left',
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>🖨️</span>
+                  <span style={{ fontWeight: 700, fontSize: '13px' }}>Daily Sheet</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Print & Save PDF</span>
+                </button>
 
-              <button
-                onClick={() => handleTabClick('daily-farms')}
-                style={{ background: currentPage === 'daily-farms' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>🚜</div>
-                Daily Farms
-              </button>
+                <button
+                  onClick={() => handleDrawerNavigate('rate')}
+                  style={{
+                    background: currentPage === 'rate' ? 'var(--primary-tint)' : 'var(--bg-card)',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
+                    textAlign: 'left',
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>📋</span>
+                  <span style={{ fontWeight: 700, fontSize: '13px' }}>Paper Rate</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Set Benchmark Rate</span>
+                </button>
 
-              <button
-                onClick={() => handleTabClick('customers')}
-                style={{ background: currentPage === 'customers' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>👥</div>
-                Customers
-              </button>
+                <button
+                  onClick={() => handleDrawerNavigate('group-summary')}
+                  style={{
+                    background: currentPage === 'group-summary' ? 'var(--primary-tint)' : 'var(--bg-card)',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px 14px',
+                    textAlign: 'left',
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>📑</span>
+                  <span style={{ fontWeight: 700, fontSize: '13px' }}>Group Summary</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Monthly Tally Ledger</span>
+                </button>
+              </div>
 
-              <button
-                onClick={() => handleTabClick('rate')}
-                style={{ background: currentPage === 'rate' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>📋</div>
-                Paper Rate
-              </button>
+              {/* Theme quick switch in drawer */}
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '14px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>{isDark ? '🌙' : '☀️'}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Theme: {isDark ? 'Dark Mode' : 'Light Mode'}
+                  </span>
+                </div>
+                <button
+                  onClick={toggleTheme}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '11.5px', padding: '4px 10px', minHeight: '32px' }}
+                >
+                  Switch
+                </button>
+              </div>
 
+              {/* Sign Out Button */}
               <button
-                onClick={() => handleTabClick('daily-sheet')}
-                style={{ background: currentPage === 'daily-sheet' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
+                onClick={logout}
+                style={{
+                  width: '100%',
+                  background: 'var(--red-bg)',
+                  border: '1px solid var(--red)',
+                  color: 'var(--red)',
+                  padding: '12px',
+                  borderRadius: 'var(--radius)',
+                  fontWeight: 700,
+                  fontSize: '13.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
               >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>🖨️</div>
-                Daily Sheet
-              </button>
-
-              <button
-                onClick={() => handleTabClick('group-summary')}
-                style={{ background: currentPage === 'group-summary' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>📑</div>
-                Group Summary
-              </button>
-
-              <button
-                onClick={() => handleTabClick('orders')}
-                style={{ background: currentPage === 'orders' ? '#2563eb' : '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '0.75rem', borderRadius: '10px', textAlign: 'left', fontWeight: 600, fontSize: '0.88rem' }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>🛒</div>
-                Sales Register
+                <span>🚪</span> Sign Out from PMR System
               </button>
             </div>
-
-            <button
-              onClick={logout}
-              style={{
-                width: '100%',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#ef4444',
-                padding: '0.85rem',
-                borderRadius: '12px',
-                fontWeight: 700,
-                fontSize: '0.95rem',
-                cursor: 'pointer'
-              }}
-            >
-              ⬅ Sign Out from PMR System
-            </button>
           </div>
         </div>
       )}
 
-      {/* Fixed Bottom Navigation Bar for Mobile Phones */}
+      {/* Fixed Bottom Navigation Bar */}
       <nav className="mobile-bottom-nav">
-        {mainTabs.map(tab => {
-          const isActive = currentPage === tab.id;
+        {mainTabs.map((tab) => {
+          const isActive = activeTabId === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
               className={`mobile-tab-btn ${isActive ? 'active' : ''}`}
+              aria-label={tab.label}
             >
               <span className="mobile-tab-icon">{tab.icon}</span>
               <span className="mobile-tab-label">{tab.label}</span>
