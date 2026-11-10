@@ -64,6 +64,7 @@ router.get('/daily', verifySupervisor, async (req, res) => {
         df.vehicle_no,
         df.total_weight_kg AS farm_intake_kg,
         df.total_boxes AS farm_intake_boxes,
+        df.weight_loss_kg,
         g.name AS group_name,
         u.name AS supervisor_name
       FROM orders o
@@ -96,6 +97,7 @@ router.get('/daily', verifySupervisor, async (req, res) => {
           vehicle_no: order.vehicle_no || '',
           intake_weight_kg: parseFloat(order.farm_intake_kg) || 0,
           intake_boxes: parseInt(order.farm_intake_boxes, 10) || 0,
+          manual_loss_kg: parseFloat(order.weight_loss_kg) || 0,
           orders: [],
           subtotal: {
             boxes: 0,
@@ -130,9 +132,40 @@ router.get('/daily', verifySupervisor, async (req, res) => {
       farmGroup.subtotal.total_amount += amount;
     }
 
-    // Compute average rate for each farm subtotal and overall grand total
+    // Compute average rate, reconciliation, and weight loss for each farm
     const farms = Array.from(farmMap.values()).map(f => {
       f.subtotal.avg_rate = f.subtotal.weight_kg > 0 ? (f.subtotal.total_amount / f.subtotal.weight_kg) : 0;
+
+      const intakeWeight = f.intake_weight_kg;
+      const intakeBoxes = f.intake_boxes;
+      const dispWeight = f.subtotal.weight_kg;
+      const dispBoxes = f.subtotal.boxes;
+      const remBoxes = Math.max(0, intakeBoxes - dispBoxes);
+
+      let effectiveLoss = f.manual_loss_kg;
+      if (effectiveLoss <= 0 && intakeBoxes > 0 && dispBoxes >= intakeBoxes && dispWeight > 0) {
+        effectiveLoss = Math.max(0, intakeWeight - dispWeight);
+      }
+
+      const lossPct = intakeWeight > 0 ? parseFloat(((effectiveLoss / intakeWeight) * 100).toFixed(2)) : 0;
+      const avgIntakeBox = intakeBoxes > 0 ? parseFloat((intakeWeight / intakeBoxes).toFixed(2)) : 0;
+      const avgDispBox = dispBoxes > 0 ? parseFloat((dispWeight / dispBoxes).toFixed(2)) : 0;
+      const lossPerBox = intakeBoxes > 0 && effectiveLoss > 0 ? parseFloat((effectiveLoss / intakeBoxes).toFixed(2)) : 0;
+
+      f.reconciliation = {
+        intake_weight_kg: intakeWeight,
+        intake_boxes: intakeBoxes,
+        dispatched_weight_kg: dispWeight,
+        dispatched_boxes: dispBoxes,
+        remaining_boxes: remBoxes,
+        weight_loss_kg: effectiveLoss,
+        weight_loss_pct: lossPct,
+        avg_intake_box_kg: avgIntakeBox,
+        avg_dispatched_box_kg: avgDispBox,
+        avg_loss_per_box_kg: lossPerBox,
+        is_trip_completed: intakeBoxes > 0 && dispBoxes >= intakeBoxes
+      };
+
       return f;
     });
 
@@ -140,16 +173,26 @@ router.get('/daily', verifySupervisor, async (req, res) => {
       boxes: 0,
       weight_kg: 0,
       total_amount: 0,
-      avg_rate: 0
+      avg_rate: 0,
+      total_intake_weight_kg: 0,
+      total_intake_boxes: 0,
+      total_weight_loss_kg: 0,
+      overall_loss_pct: 0
     };
 
     farms.forEach(f => {
       grandTotal.boxes += f.subtotal.boxes;
       grandTotal.weight_kg += f.subtotal.weight_kg;
       grandTotal.total_amount += f.subtotal.total_amount;
+      grandTotal.total_intake_weight_kg += f.intake_weight_kg;
+      grandTotal.total_intake_boxes += f.intake_boxes;
+      grandTotal.total_weight_loss_kg += (f.reconciliation ? f.reconciliation.weight_loss_kg : 0);
     });
 
-    grandTotal.avg_rate = grandTotal.weight_kg > 0 ? (grandTotal.total_amount / grandTotal.weight_kg) : 0;
+    grandTotal.avg_rate = grandTotal.weight_kg > 0 ? parseFloat((grandTotal.total_amount / grandTotal.weight_kg).toFixed(2)) : 0;
+    grandTotal.overall_loss_pct = grandTotal.total_intake_weight_kg > 0
+      ? parseFloat(((grandTotal.total_weight_loss_kg / grandTotal.total_intake_weight_kg) * 100).toFixed(2))
+      : 0;
 
     res.json({
       date: targetDate,

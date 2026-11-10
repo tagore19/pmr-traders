@@ -11,7 +11,7 @@ export default function DailyFarmsPage({ onNavigate }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Modal state
+  // Main Modal state (Add / Edit Farm)
   const [showModal, setShowModal] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
   const [farmName, setFarmName] = useState('');
@@ -19,9 +19,16 @@ export default function DailyFarmsPage({ onNavigate }) {
   const [totalWeight, setTotalWeight] = useState('');
   const [totalBoxes, setTotalBoxes] = useState('');
   const [ratePerKg, setRatePerKg] = useState('');
+  const [weightLoss, setWeightLoss] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Quick Weight Loss Modal State
+  const [lossModalFarm, setLossModalFarm] = useState(null);
+  const [quickLossInput, setQuickLossInput] = useState('');
+  const [savingLoss, setSavingLoss] = useState(false);
+  const [lossError, setLossError] = useState('');
 
   const loadFarms = async () => {
     setLoading(true);
@@ -47,6 +54,7 @@ export default function DailyFarmsPage({ onNavigate }) {
     setTotalWeight('');
     setTotalBoxes('');
     setRatePerKg('');
+    setWeightLoss('');
     setNotes('');
     setFormError('');
     setShowModal(true);
@@ -59,9 +67,44 @@ export default function DailyFarmsPage({ onNavigate }) {
     setTotalWeight(f.total_weight_kg || '');
     setTotalBoxes(f.total_boxes || '');
     setRatePerKg(f.rate_per_kg ? f.rate_per_kg.toString() : '');
+    setWeightLoss(f.weight_loss_kg ? f.weight_loss_kg.toString() : '');
     setNotes(f.notes || '');
     setFormError('');
     setShowModal(true);
+  };
+
+  const openQuickLossModal = (f) => {
+    setLossModalFarm(f);
+    // Suggest current loss or difference
+    const diff = Math.max(0, (parseFloat(f.total_weight_kg) || 0) - (parseFloat(f.total_dispatched_kg) || 0));
+    setQuickLossInput(f.weight_loss_kg > 0 ? f.weight_loss_kg.toString() : diff.toFixed(2));
+    setLossError('');
+  };
+
+  const handleSaveQuickLoss = async (e) => {
+    e.preventDefault();
+    if (!lossModalFarm) return;
+    const parsed = parseFloat(quickLossInput);
+    if (isNaN(parsed) || parsed < 0) {
+      setLossError('Please enter a valid non-negative weight loss in kg');
+      return;
+    }
+
+    setSavingLoss(true);
+    setLossError('');
+    try {
+      await api.dailyFarms.update(lossModalFarm.id, {
+        weight_loss_kg: parsed
+      });
+      setSuccess(`Weight loss of ${parsed.toFixed(2)} kg saved for "${lossModalFarm.farm_name}"`);
+      setLossModalFarm(null);
+      loadFarms();
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err) {
+      setLossError(err.message || 'Failed to save weight loss');
+    } finally {
+      setSavingLoss(false);
+    }
   };
 
   const handleSaveFarm = async (e) => {
@@ -81,6 +124,7 @@ export default function DailyFarmsPage({ onNavigate }) {
         total_weight_kg: parseFloat(totalWeight) || 0,
         total_boxes: parseInt(totalBoxes, 10) || 0,
         notes: notes.trim(),
+        ...(weightLoss !== '' ? { weight_loss_kg: parseFloat(weightLoss) || 0 } : {}),
         ...(isAdmin ? { rate_per_kg: parseFloat(ratePerKg) || 0 } : {})
       };
 
@@ -119,8 +163,13 @@ export default function DailyFarmsPage({ onNavigate }) {
   const totalProcuredBoxes = farms.reduce((sum, f) => sum + (parseInt(f.total_boxes, 10) || 0), 0);
   const totalDispatchedKg = farms.reduce((sum, f) => sum + (parseFloat(f.total_dispatched_kg) || 0), 0);
   const totalDispatchedBoxes = farms.reduce((sum, f) => sum + (parseInt(f.total_dispatched_boxes, 10) || 0), 0);
-  const remainingKg = totalProcuredKg - totalDispatchedKg;
-  const remainingBoxes = totalProcuredBoxes - totalDispatchedBoxes;
+  const totalWeightLossKg = farms.reduce((sum, f) => sum + (parseFloat(f.weight_loss_kg) || 0), 0);
+  const overallLossPct = totalProcuredKg > 0 ? (totalWeightLossKg / totalProcuredKg) * 100 : 0;
+  const remainingBoxes = Math.max(0, totalProcuredBoxes - totalDispatchedBoxes);
+  const remainingKg = farms.reduce((sum, f) => sum + (parseFloat(f.remaining_kg) || 0), 0);
+
+  const avgLoadedBox = totalProcuredBoxes > 0 ? (totalProcuredKg / totalProcuredBoxes) : 0;
+  const avgDroppedBox = totalDispatchedBoxes > 0 ? (totalDispatchedKg / totalDispatchedBoxes) : 0;
 
   // Admin Only Calculations
   const totalProcurementCost = farms.reduce((sum, f) => sum + (parseFloat(f.total_procurement_cost) || 0), 0);
@@ -136,7 +185,7 @@ export default function DailyFarmsPage({ onNavigate }) {
             🚜 Daily Farms & Vehicles Procurement
           </h1>
           <p style={{ margin: '0.25rem 0 0', color: '#94a3b8', fontSize: '0.9rem' }}>
-            Shared intake roster for Supervisor 1, Supervisor 2, and Admin. Real-time bird & box tracking.
+            Shared intake roster for Supervisor 1, Supervisor 2, and Admin. Real-time bird, box & transit weight loss tracking.
           </p>
         </div>
 
@@ -185,36 +234,66 @@ export default function DailyFarmsPage({ onNavigate }) {
         </div>
       )}
 
-      {/* Overview Cards */}
-      <div className="stats-grid">
+      {/* Overview Cards (Including Dedicated Transit Weight Loss Card) */}
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        {/* Intake Card */}
         <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem' }}>
           <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Intake Procured</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.35rem' }}>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#38bdf8' }}>{totalProcuredKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg</span>
             <span style={{ color: '#94a3b8', fontSize: '0.9rem' }}>({totalProcuredBoxes} boxes)</span>
           </div>
-          <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.25rem' }}>From {farms.length} farm(s) on {selectedDate}</div>
+          <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            Avg loaded: {avgLoadedBox.toFixed(2)} kg / box
+          </div>
         </div>
 
+        {/* Dispatched Card */}
         <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dispatched to Customers</div>
+          <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Delivered to Shops</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.35rem' }}>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>{totalDispatchedKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg</span>
             <span style={{ color: '#94a3b8', fontSize: '0.9rem' }}>({totalDispatchedBoxes} boxes)</span>
           </div>
-          <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.25rem' }}>Delivered across both groups</div>
+          <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            Avg dropped: {avgDroppedBox.toFixed(2)} kg / box
+          </div>
         </div>
 
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stock Remaining</div>
+        {/* Weight Loss KPI Card */}
+        <div style={{ background: '#1e293b', border: '1.5px solid #f87171', borderRadius: '12px', padding: '1rem 1.25rem', position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#f87171', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+              📉 Transit Weight Loss
+            </span>
+            <span style={{ fontSize: '0.68rem', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>
+              SHRINKAGE
+            </span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.35rem' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700, color: remainingKg < 0 ? '#ef4444' : '#f59e0b' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f87171', fontFamily: 'monospace' }}>
+              {totalWeightLossKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg
+            </span>
+            <span style={{ color: '#fca5a5', fontSize: '0.9rem', fontWeight: 600 }}>
+              ({overallLossPct.toFixed(2)}%)
+            </span>
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            {avgLoadedBox > 0 && avgDroppedBox > 0 ? `Drop diff: -${(avgLoadedBox - avgDroppedBox).toFixed(2)} kg / box` : 'Reconciled upon delivery'}
+          </div>
+        </div>
+
+        {/* Stock Remaining Card */}
+        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+          <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stock Remaining on Trucks</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.35rem' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: 700, color: remainingBoxes > 0 ? '#f59e0b' : '#10b981' }}>
               {remainingKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg
             </span>
             <span style={{ color: '#94a3b8', fontSize: '0.9rem' }}>({remainingBoxes} boxes)</span>
           </div>
           <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-            {remainingKg < 0 ? '⚠️ Weight loss / excess dispatched' : 'Available for further drops'}
+            {remainingBoxes === 0 && totalDispatchedBoxes > 0 ? '✅ All boxes dropped to shops' : 'Available for further drops'}
           </div>
         </div>
 
@@ -259,13 +338,13 @@ export default function DailyFarmsPage({ onNavigate }) {
       </div>
 
       {/* Daily Farms Table */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', overflow: 'hidden' }}>
+      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', overflow: 'hidden', marginTop: '1.5rem' }}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc', fontWeight: 600 }}>
             Procurement Farms for {selectedDate} ({farms.length})
           </h2>
           <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-            🔒 Protected against duplicate farm entries per date
+            ⚖️ Live Shrinkage & Weight Loss Reconciliation
           </span>
         </div>
 
@@ -290,14 +369,13 @@ export default function DailyFarmsPage({ onNavigate }) {
                 <thead>
                   <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     <th style={{ padding: '0.75rem 1rem' }}>#</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Farm Name</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Vehicle No</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Intake Weight</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Intake Boxes</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Farm & Vehicle</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Intake Loaded</th>
                     {isAdmin && <th style={{ padding: '0.75rem 1rem', color: '#38bdf8' }}>🔐 Farm Rate</th>}
                     {isAdmin && <th style={{ padding: '0.75rem 1rem', color: '#10b981' }}>🔐 Purchase Cost</th>}
                     <th style={{ padding: '0.75rem 1rem' }}>Dispatched (kg / b)</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Remaining</th>
+                    <th style={{ padding: '0.75rem 1rem', color: '#f87171' }}>📉 Weight Loss</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Truck Balance</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Added By</th>
                     <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -308,11 +386,14 @@ export default function DailyFarmsPage({ onNavigate }) {
                     const fBoxes = parseInt(f.total_boxes, 10) || 0;
                     const fDispKg = parseFloat(f.total_dispatched_kg) || 0;
                     const fDispBoxes = parseInt(f.total_dispatched_boxes, 10) || 0;
-                    const fRemKg = fWeight - fDispKg;
-                    const fRemBoxes = fBoxes - fDispBoxes;
+                    const fRemKg = parseFloat(f.remaining_kg) || 0;
+                    const fRemBoxes = parseInt(f.remaining_boxes, 10) || 0;
+                    const fLossKg = parseFloat(f.weight_loss_kg) || 0;
+                    const fLossPct = parseFloat(f.weight_loss_pct) || 0;
                     const pctDispatched = fWeight > 0 ? Math.min(100, Math.round((fDispKg / fWeight) * 100)) : 0;
                     const fRate = parseFloat(f.rate_per_kg) || 0;
                     const fCost = parseFloat(f.total_procurement_cost) || 0;
+                    const fEffRate = parseFloat(f.effective_cost_per_kg) || fRate;
 
                     return (
                       <tr key={f.id} style={{ borderBottom: '1px solid #334155' }}>
@@ -322,28 +403,41 @@ export default function DailyFarmsPage({ onNavigate }) {
                             <span style={{ fontSize: '1.1rem' }}>🌾</span>
                             <span>{f.farm_name}</span>
                           </div>
+                          {f.vehicle_no && (
+                            <div style={{ marginTop: '0.2rem' }}>
+                              <span style={{ background: '#0f172a', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid #334155', fontFamily: 'monospace', fontSize: '0.78rem', color: '#38bdf8', fontWeight: 700 }}>
+                                🚛 {f.vehicle_no}
+                              </span>
+                            </div>
+                          )}
                           {f.notes && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>{f.notes}</div>}
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1' }}>
-                          {f.vehicle_no ? (
-                            <span style={{ background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #334155', fontFamily: 'monospace', fontWeight: 600 }}>
-                              🚛 {f.vehicle_no}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#64748b' }}>—</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#38bdf8', fontWeight: 600 }}>
-                          {fWeight.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#f8fafc', fontWeight: 600 }}>
-                          {fBoxes} boxes
+
+                        {/* Intake */}
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <div style={{ color: '#38bdf8', fontWeight: 700 }}>
+                            {fWeight.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg
+                          </div>
+                          <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+                            {fBoxes} boxes ({f.avg_intake_box_kg ? `${f.avg_intake_box_kg.toFixed(2)} kg/b` : ''})
+                          </div>
                         </td>
 
                         {/* Admin-Only Rate & Total Cost Columns */}
                         {isAdmin && (
-                          <td style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontWeight: 700, color: '#38bdf8' }}>
-                            {fRate > 0 ? `₹${fRate.toFixed(2)}/kg` : <span style={{ color: '#64748b' }}>—</span>}
+                          <td style={{ padding: '0.85rem 1rem', fontFamily: 'monospace' }}>
+                            {fRate > 0 ? (
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#38bdf8' }}>₹{fRate.toFixed(2)}/kg</div>
+                                {fEffRate > fRate && (
+                                  <div style={{ fontSize: '0.72rem', color: '#fca5a5' }} title="True cost after weight loss shrinkage">
+                                    Eff: ₹{fEffRate.toFixed(2)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#64748b' }}>—</span>
+                            )}
                           </td>
                         )}
                         {isAdmin && (
@@ -352,36 +446,86 @@ export default function DailyFarmsPage({ onNavigate }) {
                           </td>
                         )}
 
+                        {/* Dispatched */}
                         <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ color: '#10b981', fontWeight: 600 }}>
+                          <div style={{ color: '#10b981', fontWeight: 700 }}>
                             {fDispKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg ({fDispBoxes} b)
                           </div>
-                          <div style={{ width: '100px', height: '5px', background: '#334155', borderRadius: '3px', marginTop: '0.35rem', overflow: 'hidden' }}>
+                          <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                            Avg drop: {f.avg_dispatched_box_kg ? `${f.avg_dispatched_box_kg.toFixed(2)} kg/b` : '—'}
+                          </div>
+                          <div style={{ width: '90px', height: '4px', background: '#334155', borderRadius: '2px', marginTop: '0.3rem', overflow: 'hidden' }}>
                             <div style={{ width: `${pctDispatched}%`, height: '100%', background: '#10b981' }} />
                           </div>
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: fRemKg < 0 ? '#ef4444' : '#f59e0b' }}>
-                          {fRemKg.toLocaleString('en-IN', { minimumFractionDigits: 1 })} kg ({fRemBoxes} b)
+
+                        {/* Weight Loss Column */}
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          <div style={{ fontWeight: 700, color: fLossKg > 0 ? '#f87171' : '#94a3b8', fontFamily: 'monospace' }}>
+                            {fLossKg > 0 ? `${fLossKg.toFixed(1)} kg` : '0.0 kg'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: fLossKg > 0 ? '#fca5a5' : '#64748b' }}>
+                            {fLossKg > 0 ? `${fLossPct.toFixed(2)}% loss` : (fRemBoxes === 0 && fDispBoxes > 0 ? '0% loss' : 'Pending drop')}
+                          </div>
+                          {f.avg_loss_per_box_kg > 0 && (
+                            <div style={{ fontSize: '0.7rem', color: '#ef4444' }}>
+                              -{f.avg_loss_per_box_kg.toFixed(2)} kg/b
+                            </div>
+                          )}
                         </td>
+
+                        {/* Remaining Truck Stock */}
+                        <td style={{ padding: '0.85rem 1rem' }}>
+                          {fRemBoxes > 0 ? (
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#f59e0b' }}>
+                                📦 {fRemBoxes} boxes left
+                              </div>
+                              <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>
+                                {fRemKg.toFixed(1)} kg remaining
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <span style={{ display: 'inline-block', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                ✅ Trip Complete
+                              </span>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                                0 boxes in truck
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Added by */}
                         <td style={{ padding: '0.85rem 1rem' }}>
                           <div style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>{f.added_by_name || 'System'}</div>
                           <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
                             {new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
+
+                        {/* Actions */}
                         <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => openQuickLossModal(f)}
+                              title="Record or adjust transit weight loss for this truck"
+                              style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '0.3rem 0.55rem', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              ⚖️ Loss
+                            </button>
                             <button
                               onClick={() => openEditModal(f)}
-                              style={{ background: '#334155', color: '#f8fafc', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+                              style={{ background: '#334155', color: '#f8fafc', border: 'none', padding: '0.3rem 0.55rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer' }}
                             >
                               ✏️ Edit
                             </button>
                             <button
                               onClick={() => handleDelete(f)}
-                              style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+                              style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.3rem 0.55rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer' }}
                             >
-                              🗑 Delete
+                              🗑
                             </button>
                           </div>
                         </td>
@@ -399,8 +543,10 @@ export default function DailyFarmsPage({ onNavigate }) {
                 const fBoxes = parseInt(f.total_boxes, 10) || 0;
                 const fDispKg = parseFloat(f.total_dispatched_kg) || 0;
                 const fDispBoxes = parseInt(f.total_dispatched_boxes, 10) || 0;
-                const fRemKg = fWeight - fDispKg;
-                const fRemBoxes = fBoxes - fDispBoxes;
+                const fRemKg = parseFloat(f.remaining_kg) || 0;
+                const fRemBoxes = parseInt(f.remaining_boxes, 10) || 0;
+                const fLossKg = parseFloat(f.weight_loss_kg) || 0;
+                const fLossPct = parseFloat(f.weight_loss_pct) || 0;
                 const pctDispatched = fWeight > 0 ? Math.min(100, Math.round((fDispKg / fWeight) * 100)) : 0;
                 const fRate = parseFloat(f.rate_per_kg) || 0;
                 const fCost = parseFloat(f.total_procurement_cost) || 0;
@@ -449,14 +595,33 @@ export default function DailyFarmsPage({ onNavigate }) {
                         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.15rem' }}>
                           {fWeight.toFixed(1)} kg ({fBoxes} b)
                         </div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                          Avg: {f.avg_intake_box_kg ? `${f.avg_intake_box_kg.toFixed(2)} kg/b` : '—'}
+                        </div>
                       </div>
 
                       <div style={{ background: '#1e293b', padding: '0.5rem 0.75rem', borderRadius: '8px' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Remaining</div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: fRemKg < 0 ? '#ef4444' : '#f59e0b', marginTop: '0.15rem' }}>
-                          {fRemKg.toFixed(1)} kg ({fRemBoxes} b)
+                        <div style={{ fontSize: '0.72rem', color: '#f87171', textTransform: 'uppercase' }}>Weight Loss</div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f87171', marginTop: '0.15rem' }}>
+                          {fLossKg.toFixed(1)} kg ({fLossPct.toFixed(1)}%)
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                          {f.avg_loss_per_box_kg > 0 ? `-${f.avg_loss_per_box_kg.toFixed(2)} kg/box` : 'Transit loss'}
                         </div>
                       </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', padding: '0.5rem 0.75rem', borderRadius: '8px', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Truck Balance:</span>
+                      {fRemBoxes > 0 ? (
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b' }}>
+                          📦 {fRemBoxes} boxes left ({fRemKg.toFixed(1)} kg)
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#34d399' }}>
+                          ✅ All boxes dropped
+                        </span>
+                      )}
                     </div>
 
                     {/* Progress Bar */}
@@ -473,6 +638,12 @@ export default function DailyFarmsPage({ onNavigate }) {
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                       <button
+                        onClick={() => openQuickLossModal(f)}
+                        style={{ flex: 1, minHeight: '38px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        ⚖️ Record Loss
+                      </button>
+                      <button
                         onClick={() => openEditModal(f)}
                         style={{ flex: 1, minHeight: '38px', background: '#334155', color: '#f8fafc', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
                       >
@@ -482,7 +653,7 @@ export default function DailyFarmsPage({ onNavigate }) {
                         onClick={() => handleDelete(f)}
                         style={{ minHeight: '38px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
                       >
-                        🗑 Delete
+                        🗑
                       </button>
                     </div>
                   </div>
@@ -493,7 +664,108 @@ export default function DailyFarmsPage({ onNavigate }) {
         )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Quick Weight Loss Modal */}
+      {lossModalFarm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+          <div style={{ background: '#1e293b', border: '1.5px solid #f87171', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '1.75rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>⚖️</span> Record Transit Weight Loss
+              </h2>
+              <button
+                onClick={() => setLossModalFarm(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.25rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 1rem' }}>
+              Reconcile live bird weight shrinkage for <strong>{lossModalFarm.farm_name}</strong> {lossModalFarm.vehicle_no ? `(${lossModalFarm.vehicle_no})` : ''}.
+            </p>
+
+            {lossError && (
+              <div style={{ background: '#450a0a', border: '1px solid #dc2626', color: '#fecaca', padding: '0.65rem 0.9rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                ⚠️ {lossError}
+              </div>
+            )}
+
+            {/* Breakdown stats */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '0.85rem 1rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
+                <span style={{ color: '#94a3b8' }}>Loaded at Farm:</span>
+                <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                  {lossModalFarm.total_weight_kg} kg ({lossModalFarm.total_boxes} boxes)
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
+                <span style={{ color: '#94a3b8' }}>Delivered to Shops:</span>
+                <span style={{ color: '#10b981', fontWeight: 700 }}>
+                  {lossModalFarm.total_dispatched_kg} kg ({lossModalFarm.total_dispatched_boxes} boxes)
+                </span>
+              </div>
+              <div style={{ borderTop: '1px dashed #334155', paddingTop: '0.4rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span style={{ color: '#fca5a5', fontWeight: 600 }}>Unaccounted Difference:</span>
+                <span style={{ color: '#f87171', fontWeight: 800, fontFamily: 'monospace' }}>
+                  {Math.max(0, lossModalFarm.total_weight_kg - lossModalFarm.total_dispatched_kg).toFixed(2)} kg
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveQuickLoss} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Actual Weight Loss (kg)
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="e.g. 120"
+                    value={quickLossInput}
+                    onChange={(e) => setQuickLossInput(e.target.value)}
+                    required
+                    style={{ flex: 1, background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f87171', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'monospace' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const diff = Math.max(0, lossModalFarm.total_weight_kg - lossModalFarm.total_dispatched_kg);
+                      setQuickLossInput(diff.toFixed(2));
+                    }}
+                    style={{ background: '#334155', color: '#38bdf8', border: 'none', padding: '0 0.85rem', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Use Full Diff
+                  </button>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                  This loss will reconcile the truck balance and adjust the true effective cost for reporting.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setLossModalFarm(null)}
+                  style={{ background: '#334155', color: '#f8fafc', border: 'none', padding: '0.6rem 1.1rem', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingLoss}
+                  style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#ffffff', border: 'none', padding: '0.6rem 1.4rem', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {savingLoss ? 'Saving...' : 'Save Weight Loss'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Main Add / Edit Modal */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ background: '#1e293b', border: '1px solid #475569', borderRadius: '16px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '1.75rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
@@ -586,6 +858,27 @@ export default function DailyFarmsPage({ onNavigate }) {
                   />
                 </div>
               </div>
+
+              {/* Weight Loss Input in Edit Modal */}
+              {editingFarm && (
+                <div>
+                  <label style={{ display: 'block', color: '#f87171', fontSize: '0.85rem', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Transit Weight Loss (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="Optional manual weight loss in kg"
+                    value={weightLoss}
+                    onChange={(e) => setWeightLoss(e.target.value)}
+                    style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f87171', fontSize: '0.95rem', fontWeight: 700, boxSizing: 'border-box' }}
+                  />
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                    Leave empty to auto-calculate once all crates are dropped.
+                  </div>
+                </div>
+              )}
 
               {/* Admin Only Purchase Rate Input & Live Cost Preview */}
               {isAdmin && (

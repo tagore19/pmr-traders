@@ -225,6 +225,52 @@ export default function DailySheetPage() {
                   </tr>
                 </tfoot>
               </table>
+
+              {/* Transit & Vehicle Reconciliation */}
+              {farm.reconciliation && farm.reconciliation.intake_boxes > 0 && (
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderTop: 'none',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.8rem',
+                  color: '#334155',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    <span>
+                      📥 <strong>Farm Intake:</strong> {farm.reconciliation.intake_weight_kg.toFixed(2)} kg ({farm.reconciliation.intake_boxes} b @ {farm.reconciliation.avg_intake_box_kg.toFixed(2)} kg/b)
+                    </span>
+                    <span>
+                      🚚 <strong>Dispatched:</strong> {farm.reconciliation.dispatched_weight_kg.toFixed(2)} kg ({farm.reconciliation.dispatched_boxes} b @ {farm.reconciliation.avg_dispatched_box_kg.toFixed(2)} kg/b)
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    {farm.reconciliation.weight_loss_kg > 0 ? (
+                      <span style={{ color: '#b91c1c', fontWeight: 700 }}>
+                        📉 Transit Loss: {farm.reconciliation.weight_loss_kg.toFixed(2)} kg ({farm.reconciliation.weight_loss_pct.toFixed(2)}%)
+                        {farm.reconciliation.avg_loss_per_box_kg > 0 && (
+                          <span style={{ fontWeight: 500, marginLeft: '0.3rem', color: '#64748b' }}>
+                            (~{farm.reconciliation.avg_loss_per_box_kg.toFixed(2)} kg/b)
+                          </span>
+                        )}
+                      </span>
+                    ) : farm.reconciliation.remaining_boxes > 0 ? (
+                      <span style={{ color: '#2563eb', fontWeight: 600 }}>
+                        📦 On Truck: {farm.reconciliation.remaining_boxes} boxes remaining
+                      </span>
+                    ) : (
+                      <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                        ✅ Clean Reconciliation (0 Loss)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
@@ -252,6 +298,18 @@ export default function DailySheetPage() {
                     {sheetData.grand_total.weight_kg.toFixed(2)} kgs
                   </div>
                 </div>
+
+                {sheetData.grand_total.total_weight_loss_kg > 0 && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#dc2626', textTransform: 'uppercase', fontWeight: 700 }}>Total Weight Loss</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#dc2626', fontFamily: 'monospace' }}>
+                      {sheetData.grand_total.total_weight_loss_kg.toFixed(2)} kgs
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: '0.25rem', color: '#b91c1c' }}>
+                        ({sheetData.grand_total.overall_loss_pct.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Total Amount</div>

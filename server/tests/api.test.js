@@ -349,3 +349,108 @@ test('11. IDOR Security Checks (Inter-group Access Prevention)', async () => {
   });
   assert.equal(idorOrderRes.status, 403, 'Cross-group order deletion must be forbidden');
 });
+
+test('12. Transit Weight Loss Reconciliation & Effective Cost Tracking', async () => {
+  const testDate = '2026-11-05';
+  const farmName = 'Shrinkage Test Farm ' + Date.now();
+
+  // 0. Set paper rate for 2026-11-05
+  await fetch(`${BASE_URL}/rates/daily`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({ date: testDate, paper_rate: 130.00 })
+  });
+
+  // 1. Admin creates daily farm: 2000 kg, 57 boxes @ ₹100/kg (procurement = ₹2,00,000)
+  const addFarmRes = await fetch(`${BASE_URL}/daily-farms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({
+      date: testDate,
+      farm_name: farmName,
+      vehicle_no: 'TS 09 XY 9999',
+      total_weight_kg: 2000,
+      total_boxes: 57,
+      rate_per_kg: 100,
+      notes: 'Testing transit shrinkage'
+    })
+  });
+  assert.equal(addFarmRes.status, 201);
+  const farm = await addFarmRes.json();
+  const farmId = farm.id;
+
+  // 2. Add an order that consumes all 57 boxes, but delivered weight is only 1880 kg (120 kg transit loss)
+  const orderRes = await fetch(`${BASE_URL}/orders`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${sureshToken}`
+    },
+    body: JSON.stringify({
+      customer_id: testCustomerId,
+      daily_farm_id: farmId,
+      boxes: 57,
+      weight_kg: 1880,
+      date: testDate,
+      notes: 'Final batch offloaded'
+    })
+  });
+  assert.equal(orderRes.status, 201);
+
+  // 3. Admin checks daily-farms: remaining_boxes is 0, so remaining_kg should be 0, and auto-detected weight_loss_kg should be 120
+  const checkFarmsRes = await fetch(`${BASE_URL}/daily-farms?date=${testDate}`, {
+    headers: { 'Authorization': `Bearer ${adminToken}` }
+  });
+  assert.equal(checkFarmsRes.status, 200);
+  const farms = await checkFarmsRes.json();
+  const targetFarm = farms.find(f => f.id === farmId);
+  assert.ok(targetFarm);
+
+  assert.equal(targetFarm.remaining_boxes, 0);
+  assert.equal(targetFarm.remaining_kg, 0, 'Zero boxes remaining must mean zero unsold stock');
+  assert.equal(targetFarm.weight_loss_kg, 120, 'Transit loss should auto-calculate to 120 kg');
+  assert.equal(targetFarm.weight_loss_pct, 6.0, 'Transit loss % should be 6.0%');
+  assert.equal(targetFarm.avg_intake_box_kg, 35.09);
+  assert.equal(targetFarm.avg_dispatched_box_kg, 32.98);
+  assert.equal(targetFarm.avg_loss_per_box_kg, 2.11);
+  assert.equal(targetFarm.effective_cost_per_kg, 106.38, 'Effective cost should be ₹200,000 / 1880kg = ₹106.38/kg');
+
+  // 4. Update weight_loss_kg manually via PUT
+  const updateRes = await fetch(`${BASE_URL}/daily-farms/${farmId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${sureshToken}`
+    },
+    body: JSON.stringify({
+      farm_name: farmName,
+      vehicle_no: 'TS 09 XY 9999',
+      total_weight_kg: 2000,
+      total_boxes: 57,
+      weight_loss_kg: 125,
+      notes: 'Truck scale confirmed 125kg loss'
+    })
+  });
+  assert.equal(updateRes.status, 200);
+  const updatedFarm = await updateRes.json();
+  assert.equal(parseFloat(updatedFarm.weight_loss_kg), 125);
+
+  // 5. Check Daily Sheet reconciliation
+  const sheetRes = await fetch(`${BASE_URL}/sheets/daily?date=${testDate}`, {
+    headers: { 'Authorization': `Bearer ${adminToken}` }
+  });
+  assert.equal(sheetRes.status, 200);
+  const sheet = await sheetRes.json();
+  const farmSheet = sheet.farms.find(f => f.farm_id === farmId);
+  assert.ok(farmSheet);
+  assert.ok(farmSheet.reconciliation);
+  assert.equal(farmSheet.reconciliation.weight_loss_kg, 125);
+  assert.equal(farmSheet.reconciliation.weight_loss_pct, 6.25);
+  assert.ok(sheet.grand_total.total_weight_loss_kg >= 125);
+});
